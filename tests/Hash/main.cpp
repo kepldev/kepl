@@ -44,15 +44,26 @@ extern "C" {
   static void slow_hash(const void *data, size_t length, char *hash) {
     cn_slow_hash(*context, data, length, *reinterpret_cast<chash *>(hash));
   }
+
+  static void slow_hash_v7(const void *data, size_t length, char *hash) {
+    cn_slow_hash_v7(*context, data, length, *reinterpret_cast<chash *>(hash));
+  }
 }
 
 extern "C" typedef void hash_f(const void *, size_t, char *);
 struct hash_func {
   const string name;
   hash_f &f;
-} hashes[] = {{"fast", Crypto::cn_fast_hash}, {"slow", slow_hash}, {"tree", hash_tree},
-  {"extra-blake", Crypto::hash_extra_blake}, {"extra-groestl", Crypto::hash_extra_groestl},
-  {"extra-jh", Crypto::hash_extra_jh}, {"extra-skein", Crypto::hash_extra_skein}};
+} hashes[] = {
+  {"fast", Crypto::cn_fast_hash},
+  {"slow", slow_hash},
+  {"slow-v7", slow_hash_v7},
+  {"tree", hash_tree},
+  {"extra-blake", Crypto::hash_extra_blake},
+  {"extra-groestl", Crypto::hash_extra_groestl},
+  {"extra-jh", Crypto::hash_extra_jh},
+  {"extra-skein", Crypto::hash_extra_skein}
+};
 
 int main(int argc, char *argv[]) {
   hash_f *f;
@@ -76,7 +87,7 @@ int main(int argc, char *argv[]) {
       break;
     }
   }
-  if (f == slow_hash) {
+  if (f == slow_hash || f == slow_hash_v7) {
     context = new Crypto::cn_context();
   }
   input.open(argv[2], ios_base::in);

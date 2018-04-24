@@ -33,11 +33,12 @@
 #include "Common/int-util.h"
 #include "hash-ops.h"
 #include "oaes_lib.h"
+#include "cryptonight-variants.h"
 
-void (*cn_slow_hash_fp)(void *, const void *, size_t, void *);
+void (*cn_slow_hash_fp)(void *, const void *, size_t, void *, int);
 
-void cn_slow_hash_f(void * a, const void * b, size_t c, void * d){
-(*cn_slow_hash_fp)(a, b, c, d);
+void cn_slow_hash_f(void * a, const void * b, size_t c, void * d, int variant){
+  (*cn_slow_hash_fp)(a, b, c, d, variant);
 }
 
 #if defined(__GNUC__)

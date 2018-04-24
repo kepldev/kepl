@@ -106,7 +106,7 @@ void Miner::workerFunc(const BlockTemplate& blockTemplate, Difficulty difficulty
       CachedBlock cachedBlock(block);
       Crypto::Hash hash = cachedBlock.getBlockLongHash(cryptoContext);
       if (check_hash(hash, difficulty)) {
-        m_logger(Logging::INFO) << "Found block for difficulty " << difficulty;
+	m_logger(Logging::INFO) << "Found block for difficulty " << difficulty << " with version " << static_cast<int>(block.majorVersion);
 
         if (!setStateBlockFound()) {
           m_logger(Logging::DEBUGGING) << "block is already found or mining stopped";
