@@ -1,19 +1,19 @@
-// Copyright (c) 2012-2017, The CryptoNote developers, The KEPL developers
+// Copyright (c) 2012-2017, The CryptoNote developers, The Bytecoin developers
 //
-// This file is part of KEPL.
+// This file is part of Bytecoin.
 //
-// KEPL is free software: you can redistribute it and/or modify
+// Bytecoin is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// KEPL is distributed in the hope that it will be useful,
+// Bytecoin is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with KEPL.  If not, see <http://www.gnu.org/licenses/>.
+// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "WalletSerializationV1.h"
 
@@ -338,7 +338,17 @@ void WalletSerializerV1::loadWalletV1(Common::IInputStream& source, const Crypto
   CryptoNote::BinaryInputStreamSerializer serializer(decryptedStream);
 
   loadWalletV1Keys(serializer);
-  checkKeys();
+
+  try
+  {
+    checkKeys();
+  }
+  /* Remove the partially (incorrectly) parsed wallet, pass is wrong */
+  catch (const std::system_error &e)
+  {
+    m_walletsContainer.clear();
+    throw(e);
+  }
 
   subscribeWallets();
 
@@ -485,6 +495,7 @@ void WalletSerializerV1::subscribeWallets() {
 
     auto& subscription = m_synchronizer.addSubscription(sub);
     bool r = index.modify(it, [&subscription] (WalletRecord& rec) { rec.container = &subscription.getContainer(); });
+    if (r) {}
     assert(r);
 
     subscription.addObserver(&m_transfersObserver);
@@ -526,6 +537,7 @@ void WalletSerializerV1::loadUnlockTransactionsJobs(Common::IInputStream& source
   auto& index = m_unlockTransactions.get<TransactionHashIndex>();
   auto& walletsIndex = m_walletsContainer.get<RandomAccessIndex>();
   const uint64_t walletsSize = walletsIndex.size();
+  if (walletsSize) {}
 
   uint64_t jobsCount = 0;
   deserializeEncrypted(jobsCount, "unlock_transactions_jobs_count", cryptoContext, source);

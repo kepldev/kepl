@@ -1,19 +1,7 @@
-// Copyright (c) 2012-2017, The CryptoNote developers, The KEPL developers
-//
-// This file is part of KEPL.
-//
-// KEPL is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// KEPL is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with KEPL.  If not, see <http://www.gnu.org/licenses/>.
+// Copyright (c) 2012-2017, The CryptoNote developers, The Bytecoin developers
+// Copyright (c) 2018, The TurtleCoin Developers
+// 
+// Please see the included LICENSE file for more information.
 
 #include "NodeFactory.h"
 
@@ -38,6 +26,7 @@ public:
   virtual uint32_t getLocalBlockCount() const override { return 0; }
   virtual uint32_t getKnownBlockCount() const override { return 0; }
   virtual uint64_t getLastLocalBlockTimestamp() const override { return 0; }
+  virtual std::string getInfo() override { return std::string(); }
 
   virtual void getBlockHashesByTimestamps(uint64_t timestampBegin, size_t secondsCount, std::vector<Crypto::Hash>& blockHashes, const Callback& callback) override {
     callback(std::error_code());
@@ -75,6 +64,9 @@ public:
     const Callback& callback) override { }
 
   virtual void getBlocks(const std::vector<Crypto::Hash>& blockHashes, std::vector<CryptoNote::BlockDetails>& blocks,
+    const Callback& callback) override { }
+
+  virtual void getBlock(const uint32_t blockHeight, CryptoNote::BlockDetails &block,
     const Callback& callback) override { }
 
   virtual void getTransactions(const std::vector<Crypto::Hash>& transactionHashes, std::vector<CryptoNote::TransactionDetails>& transactions,

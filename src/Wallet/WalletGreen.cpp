@@ -146,7 +146,6 @@ WalletGreen::WalletGreen(System::Dispatcher& dispatcher, const Currency& currenc
   m_pendingBalance(0),
   m_transactionSoftLockTime(transactionSoftLockTime)
 {
-  m_upperTransactionSizeLimit = parameters::CRYPTONOTE_BLOCK_GRANTED_FULL_REWARD_ZONE_CURRENT * 125 / 100 - m_currency.minerTxBlobReservedSize();
   m_readyEvent.set();
 }
 
@@ -156,6 +155,23 @@ WalletGreen::~WalletGreen() {
   }
 
   m_dispatcher.yield(); //let remote spawns finish
+}
+
+void WalletGreen::createViewWallet(const std::string &path,
+                                   const std::string &password,
+                                   const std::string address,
+                                   const Crypto::SecretKey &viewSecretKey)
+{
+    CryptoNote::AccountPublicAddress publicKeys;
+    uint64_t prefix;
+
+    if (!CryptoNote::parseAccountAddressString(prefix, publicKeys, address))
+    {
+        throw std::runtime_error("Failed to parse address!");
+    }
+
+    initializeWithViewKey(path, password, viewSecretKey);
+    createAddress(publicKeys.spendPublicKey);
 }
 
 void WalletGreen::initialize(const std::string& path, const std::string& password) {
@@ -197,12 +213,31 @@ void WalletGreen::doShutdown() {
 
   m_containerStorage.close();
   m_walletsContainer.clear();
+
   clearCaches(true, true);
 
   std::queue<WalletEvent> noEvents;
   std::swap(m_events, noEvents);
 
   m_state = WalletState::NOT_INITIALIZED;
+}
+
+void WalletGreen::clearCacheAndShutdown()
+{
+  if (m_walletsContainer.size() != 0) {
+    m_synchronizer.unsubscribeConsumerNotifications(m_viewPublicKey, this);
+  }
+
+  stopBlockchainSynchronizer();
+  m_blockchainSynchronizer.removeObserver(this);
+
+  clearCaches(true, true);
+
+  saveWalletCache(m_containerStorage, m_key, WalletSaveLevel::SAVE_ALL, "");
+
+  m_walletsContainer.clear();
+
+  shutdown();
 }
 
 void WalletGreen::clearCaches(bool clearTransactions, bool clearCachedData) {
@@ -760,12 +795,12 @@ void WalletGreen::subscribeWallets() {
       sub.keys.viewSecretKey = m_viewSecretKey;
       sub.keys.spendSecretKey = wallet.spendSecretKey;
       sub.transactionSpendableAge = m_transactionSoftLockTime;
-
-    sub.syncStart.height = 0;
+      sub.syncStart.height = 0;
       sub.syncStart.timestamp = std::max(static_cast<uint64_t>(wallet.creationTimestamp), ACCOUNT_CREATE_TIME_ACCURACY) - ACCOUNT_CREATE_TIME_ACCURACY;
 
       auto& subscription = m_synchronizer.addSubscription(sub);
       bool r = index.modify(it, [&subscription](WalletRecord& rec) { rec.container = &subscription.getContainer(); });
+      if (r) {}
       assert(r);
 
       subscription.addObserver(this);
@@ -954,8 +989,7 @@ std::string WalletGreen::createAddress(const Crypto::SecretKey& spendSecretKey) 
     throw std::system_error(make_error_code(CryptoNote::error::KEY_GENERATION_ERROR));
   }
 
-  uint64_t creationTimestamp = static_cast<uint64_t>(time(nullptr));
-  return doCreateAddress(spendPublicKey, spendSecretKey, creationTimestamp);
+  return doCreateAddress(spendPublicKey, spendSecretKey, 0);
 }
 
 std::string WalletGreen::createAddress(const Crypto::PublicKey& spendPublicKey) {
@@ -964,8 +998,7 @@ std::string WalletGreen::createAddress(const Crypto::PublicKey& spendPublicKey) 
     throw std::system_error(make_error_code(error::WRONG_PARAMETERS), "Wrong public key format");
   }
 
-  uint64_t creationTimestamp = static_cast<uint64_t>(time(nullptr));
-  return doCreateAddress(spendPublicKey, NULL_SECRET_KEY, creationTimestamp);
+  return doCreateAddress(spendPublicKey, NULL_SECRET_KEY, 0);
 }
 
 std::vector<std::string> WalletGreen::createAddressList(const std::vector<Crypto::SecretKey>& spendSecretKeys) {
@@ -1076,9 +1109,7 @@ std::string WalletGreen::addWallet(const Crypto::PublicKey& spendPublicKey, cons
     sub.keys.viewSecretKey = m_viewSecretKey;
     sub.keys.spendSecretKey = spendSecretKey;
     sub.transactionSpendableAge = m_transactionSoftLockTime;
-
-//    sub.syncStart.height = 0;
-    sub.syncStart.height = m_totalBlockCount;
+    sub.syncStart.height = 0;
     sub.syncStart.timestamp = std::max(creationTimestamp, ACCOUNT_CREATE_TIME_ACCURACY) - ACCOUNT_CREATE_TIME_ACCURACY;
 
     auto& trSubscription = m_synchronizer.addSubscription(sub);
@@ -1305,7 +1336,7 @@ void WalletGreen::prepareTransaction(std::vector<WalletOuts>&& wallets,
   preparedTransaction.neededMoney = countNeededMoney(preparedTransaction.destinations, fee);
 
   std::vector<OutputToTransfer> selectedTransfers;
-  uint64_t foundMoney = selectTransfers(preparedTransaction.neededMoney, mixIn == 0, m_currency.defaultDustThreshold(), std::move(wallets), selectedTransfers);
+  uint64_t foundMoney = selectTransfers(preparedTransaction.neededMoney, mixIn == 0, m_currency.defaultDustThreshold(m_node.getLastKnownBlockHeight()), std::move(wallets), selectedTransfers);
 
   if (foundMoney < preparedTransaction.neededMoney) {
     m_logger(ERROR, BRIGHT_RED) << "Failed to create transaction: not enough money. Needed " << m_currency.formatAmount(preparedTransaction.neededMoney) <<
@@ -1323,10 +1354,10 @@ void WalletGreen::prepareTransaction(std::vector<WalletOuts>&& wallets,
   std::vector<InputInfo> keysInfo;
   prepareInputs(selectedTransfers, mixinResult, mixIn, keysInfo);
 
-  uint64_t donationAmount = pushDonationTransferIfPossible(donation, foundMoney - preparedTransaction.neededMoney, m_currency.defaultDustThreshold(), preparedTransaction.destinations);
+  uint64_t donationAmount = pushDonationTransferIfPossible(donation, foundMoney - preparedTransaction.neededMoney, m_currency.defaultDustThreshold(m_node.getLastKnownBlockHeight()), preparedTransaction.destinations);
   preparedTransaction.changeAmount = foundMoney - preparedTransaction.neededMoney - donationAmount;
 
-  std::vector<ReceiverAmounts> decomposedOutputs = splitDestinations(preparedTransaction.destinations, m_currency.defaultDustThreshold(), m_currency);
+  std::vector<ReceiverAmounts> decomposedOutputs = splitDestinations(preparedTransaction.destinations, m_currency.defaultDustThreshold(m_node.getLastKnownBlockHeight()), m_currency);
   if (preparedTransaction.changeAmount != 0) {
     WalletTransfer changeTransfer;
     changeTransfer.type = WalletTransferType::CHANGE;
@@ -1334,7 +1365,7 @@ void WalletGreen::prepareTransaction(std::vector<WalletOuts>&& wallets,
     changeTransfer.amount = static_cast<int64_t>(preparedTransaction.changeAmount);
     preparedTransaction.destinations.emplace_back(std::move(changeTransfer));
 
-    auto splittedChange = splitAmount(preparedTransaction.changeAmount, changeDestination, m_currency.defaultDustThreshold());
+    auto splittedChange = splitAmount(preparedTransaction.changeAmount, changeDestination, m_currency.defaultDustThreshold(m_node.getLastKnownBlockHeight()));
     decomposedOutputs.emplace_back(std::move(splittedChange));
   }
 
@@ -1548,6 +1579,44 @@ size_t WalletGreen::doTransfer(const TransactionParameters& transactionParameter
     preparedTransaction);
 
   return validateSaveAndSendTransaction(*preparedTransaction.transaction, preparedTransaction.destinations, false, true);
+}
+
+size_t WalletGreen::getTxSize(const TransactionParameters &sendingTransaction)
+{
+  System::EventLock lk(m_readyEvent);
+
+  throwIfNotInitialized();
+  throwIfTrackingMode();
+  throwIfStopped();
+
+  CryptoNote::AccountPublicAddress changeDestination = getChangeDestination(sendingTransaction.changeDestination, sendingTransaction.sourceAddresses);
+
+  std::vector<WalletOuts> wallets;
+  if (!sendingTransaction.sourceAddresses.empty()) {
+    wallets = pickWallets(sendingTransaction.sourceAddresses);
+  } else {
+    wallets = pickWalletsWithMoney();
+  }
+
+  PreparedTransaction preparedTransaction;
+  prepareTransaction(
+    std::move(wallets),
+    sendingTransaction.destinations,
+    sendingTransaction.fee,
+    sendingTransaction.mixIn,
+    sendingTransaction.extra,
+    sendingTransaction.unlockTimestamp,
+    sendingTransaction.donation,
+    changeDestination,
+    preparedTransaction);
+
+  BinaryArray transactionData = preparedTransaction.transaction->getTransactionData();
+  return transactionData.size();
+}
+
+bool WalletGreen::txIsTooLarge(const TransactionParameters& sendingTransaction)
+{
+  return getTxSize(sendingTransaction) > getMaxTxSize();
 }
 
 size_t WalletGreen::makeTransaction(const TransactionParameters& sendingTransaction) {
@@ -1768,6 +1837,7 @@ bool WalletGreen::updateWalletTransactionInfo(size_t transactionId, const Crypto
     }
   });
 
+  if (r) {}
   assert(r);
 
   if (updated) {
@@ -2073,9 +2143,11 @@ void WalletGreen::sendTransaction(const CryptoNote::Transaction& cryptoNoteTrans
 size_t WalletGreen::validateSaveAndSendTransaction(const ITransactionReader& transaction, const std::vector<WalletTransfer>& destinations, bool isFusion, bool send) {
   BinaryArray transactionData = transaction.getTransactionData();
 
-  if (transactionData.size() > m_upperTransactionSizeLimit) {
+  size_t maxTxSize = getMaxTxSize();
+
+  if (transactionData.size() > maxTxSize) {
     m_logger(ERROR, BRIGHT_RED) << "Transaction is too big. Transaction hash " << transaction.getTransactionHash() <<
-      ", size " << transactionData.size() << ", size limit " << m_upperTransactionSizeLimit;
+      ", size " << transactionData.size() << ", size limit " << maxTxSize;
     throw std::system_error(make_error_code(error::TRANSACTION_SIZE_TOO_BIG));
   }
 
@@ -2488,8 +2560,6 @@ void WalletGreen::synchronizationCompleted(std::error_code result) {
 }
 
 void WalletGreen::onSynchronizationProgressUpdated(uint32_t processedBlockCount, uint32_t totalBlockCount) {
-//  m_totalBlockCount = totalBlockCount;
-  m_totalBlockCount = 0;
   assert(processedBlockCount > 0);
 
   System::EventLock lk(m_readyEvent);
@@ -2596,6 +2666,7 @@ void WalletGreen::onTransactionUpdated(const Crypto::PublicKey&, const Crypto::H
     // Don't move this code to the following remote spawn, because it guarantees that the container has the transaction
     uint64_t outputsAmount;
     bool found = container->getTransactionInformation(transactionHash, info, &inputsAmount, &outputsAmount);
+    if (found) {}
     assert(found);
 
     ContainerAmounts containerAmounts;
@@ -2764,6 +2835,15 @@ void WalletGreen::startBlockchainSynchronizer() {
     m_blockchainSynchronizer.start();
     m_blockchainSynchronizerStarted = true;
   }
+}
+
+/* The blockchain events are sent to us from the blockchain synchronizer,
+   but they appear to not get executed on the dispatcher until the synchronizer
+   stops. After some investigation, it appears that we need to run this
+   archaic line of code to run other code on the dispatcher? */
+void WalletGreen::updateInternalCache() {
+    System::RemoteContext<void> updateInternalBC(m_dispatcher, [this] () {});
+    updateInternalBC.get();
 }
 
 void WalletGreen::stopBlockchainSynchronizer() {
@@ -2935,10 +3015,12 @@ size_t WalletGreen::createFusionTransaction(uint64_t threshold, uint16_t mixin,
 
   const size_t MAX_FUSION_OUTPUT_COUNT = 4;
 
-  if (threshold <= m_currency.defaultDustThreshold()) {
+  uint32_t height = m_node.getLastKnownBlockHeight();
+
+  if (threshold <= m_currency.defaultDustThreshold(height)) {
     m_logger(ERROR, BRIGHT_RED) << "Fusion transaction threshold is too small. Threshold " << m_currency.formatAmount(threshold) <<
-      ", minimum threshold " << m_currency.formatAmount(m_currency.defaultDustThreshold() + 1);
-    throw std::runtime_error("Threshold must be greater than " + m_currency.formatAmount(m_currency.defaultDustThreshold()));
+      ", minimum threshold " << m_currency.formatAmount(m_currency.defaultDustThreshold(height) + 1);
+    throw std::runtime_error("Threshold must be greater than " + m_currency.formatAmount(m_currency.defaultDustThreshold(height)));
   }
 
   if (m_walletsContainer.get<RandomAccessIndex>().size() == 0) {
@@ -2974,7 +3056,8 @@ size_t WalletGreen::createFusionTransaction(uint64_t threshold, uint16_t mixin,
   std::unique_ptr<ITransaction> fusionTransaction;
   size_t transactionSize;
   int round = 0;
-  uint64_t transactionAmount;
+  uint64_t transactionAmount = 0;
+  if (transactionAmount) {}
   do {
     if (round != 0) {
       fusionInputs.pop_back();
@@ -3076,7 +3159,7 @@ bool WalletGreen::isFusionTransaction(const WalletTransaction& walletTx) const {
   if (outputsSum != inputsSum || outputsSum != txInfo.totalAmountOut || inputsSum != txInfo.totalAmountIn) {
     return false;
   } else {
-    return m_currency.isFusionTransaction(inputsAmounts, outputsAmounts, 0); //size = 0 here because can't get real size of tx in wallet.
+    return m_currency.isFusionTransaction(inputsAmounts, outputsAmounts, 0, m_node.getLastKnownBlockHeight()); //size = 0 here because can't get real size of tx in wallet.
   }
 }
 
@@ -3095,7 +3178,7 @@ IFusionManager::EstimateResult WalletGreen::estimate(uint64_t threshold, const s
   for (size_t walletIndex = 0; walletIndex < walletOuts.size(); ++walletIndex) {
     for (auto& out : walletOuts[walletIndex].outs) {
       uint8_t powerOfTen = 0;
-      if (m_currency.isAmountApplicableInFusionTransactionInput(out.amount, threshold, powerOfTen)) {
+      if (m_currency.isAmountApplicableInFusionTransactionInput(out.amount, threshold, powerOfTen, m_node.getLastKnownBlockHeight())) {
         assert(powerOfTen < std::numeric_limits<uint64_t>::digits10 + 1);
         bucketSizes[powerOfTen]++;
       }
@@ -3123,7 +3206,7 @@ std::vector<WalletGreen::OutputToTransfer> WalletGreen::pickRandomFusionInputs(c
   for (size_t walletIndex = 0; walletIndex < walletOuts.size(); ++walletIndex) {
     for (auto& out : walletOuts[walletIndex].outs) {
       uint8_t powerOfTen = 0;
-      if (m_currency.isAmountApplicableInFusionTransactionInput(out.amount, threshold, powerOfTen)) {
+      if (m_currency.isAmountApplicableInFusionTransactionInput(out.amount, threshold, powerOfTen, m_node.getLastKnownBlockHeight())) {
         allFusionReadyOuts.push_back({std::move(out), walletOuts[walletIndex].wallet});
         assert(powerOfTen < std::numeric_limits<uint64_t>::digits10 + 1);
         bucketSizes[powerOfTen]++;
@@ -3187,6 +3270,11 @@ std::vector<TransactionsInBlockInfo> WalletGreen::getTransactionsInBlocks(uint32
     m_logger(ERROR, BRIGHT_RED) << "Bad argument: block count must be greater than zero";
     throw std::system_error(make_error_code(error::WRONG_PARAMETERS), "blocks count must be greater than zero");
   }
+  
+  if (blockIndex == 0) {
+    m_logger(ERROR, BRIGHT_RED) << "Bad argument: blockIndex must be greater than zero";
+    throw std::system_error(make_error_code(error::WRONG_PARAMETERS), "blockIndex must be greater than zero");
+  }
 
   std::vector<TransactionsInBlockInfo> result;
 
@@ -3199,7 +3287,7 @@ std::vector<TransactionsInBlockInfo> WalletGreen::getTransactionsInBlocks(uint32
 
   for (uint32_t height = blockIndex; height < stopIndex; ++height) {
     TransactionsInBlockInfo info;
-    info.blockHash = m_blockchain[height];
+    info.blockHash = m_blockchain[height-1];
 
     auto lowerBound = blockHeightIndex.lower_bound(height);
     auto upperBound = blockHeightIndex.upper_bound(height);
@@ -3390,6 +3478,52 @@ void WalletGreen::deleteFromUncommitedTransactions(const std::vector<size_t>& de
   for (auto transactionId: deletedTransactions) {
     m_uncommitedTransactions.erase(transactionId);
   }
+}
+
+/* The formula for the block size is as follows. Calculate the
+   maxBlockCumulativeSize. This is equal to:
+   100,000 + ((height * 102,400) / 1,051,200)
+   At a block height of 400k, this gives us a size of 138,964.
+   The constants this calculation arise from can be seen below, or in
+   src/CryptoNoteCore/Currency.cpp::maxBlockCumulativeSize(). Call this value
+   x.
+
+   Next, calculate the median size of the last 100 blocks. Take the max of
+   this value, and 100,000. Multiply this value by 1.25. Call this value y.
+
+   Finally, return the minimum of x and y.
+
+   Or, in short: min(140k (slowly rising), 1.25 * max(100k, median(last 100 blocks size)))
+   Block size will always be 125k or greater (Assuming non testnet)
+
+   To get the max transaction size, remove 600 from this value, for the
+   reserved miner transaction.
+
+   We are going to ignore the median(last 100 blocks size), as it is possible
+   for a transaction to be valid for inclusion in a block when it is submitted,
+   but not when it actually comes to be mined, for example if the median
+   block size suddenly decreases. This gives a bit of a lower cap of max
+   tx sizes, but prevents anything getting stuck in the pool.
+
+*/
+size_t WalletGreen::getMaxTxSize()
+{
+    uint32_t currentHeight = m_node.getLastKnownBlockHeight();
+
+    size_t growth = (currentHeight * CryptoNote
+                                   ::parameters
+                                   ::MAX_BLOCK_SIZE_GROWTH_SPEED_NUMERATOR) /
+
+                    CryptoNote
+                  ::parameters
+                  ::MAX_BLOCK_SIZE_GROWTH_SPEED_DENOMINATOR;
+
+    size_t x = CryptoNote::parameters::MAX_BLOCK_SIZE_INITIAL + growth;
+
+    size_t y = 125000;
+
+    return std::min(x, y) - CryptoNote::parameters
+                                      ::CRYPTONOTE_COINBASE_BLOB_RESERVED_SIZE;
 }
 
 } //namespace CryptoNote

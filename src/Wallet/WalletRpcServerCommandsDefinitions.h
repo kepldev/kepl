@@ -1,19 +1,19 @@
-// Copyright (c) 2012-2017, The CryptoNote developers, The KEPL developers
+// Copyright (c) 2012-2017, The CryptoNote developers, The Bytecoin developers
 //
-// This file is part of KEPL.
+// This file is part of Bytecoin.
 //
-// KEPL is free software: you can redistribute it and/or modify
+// Bytecoin is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// KEPL is distributed in the hope that it will be useful,
+// Bytecoin is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with KEPL.  If not, see <http://www.gnu.org/licenses/>.
+// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 #include "CryptoNoteProtocol/CryptoNoteProtocolDefinitions.h"
@@ -89,6 +89,12 @@ using CryptoNote::ISerializer;
   };
 
   struct COMMAND_RPC_STORE
+  {
+    typedef CryptoNote::EMPTY_STRUCT request;
+    typedef CryptoNote::EMPTY_STRUCT response;
+  };
+
+  struct COMMAND_RPC_STOP
   {
     typedef CryptoNote::EMPTY_STRUCT request;
     typedef CryptoNote::EMPTY_STRUCT response;
@@ -182,5 +188,52 @@ using CryptoNote::ISerializer;
     typedef CryptoNote::EMPTY_STRUCT request;
     typedef CryptoNote::EMPTY_STRUCT response;
   };
+
+  struct COMMAND_RPC_RESET_FROM {
+
+    struct request
+    {
+    uint64_t height;
+
+      void serialize(ISerializer& s) {
+        KV_MEMBER(height)
+      }
+    };
+
+    typedef CryptoNote::EMPTY_STRUCT response;
+
+  };
+
+  struct COMMAND_RPC_GET_ADDRESS
+  {
+    typedef CryptoNote::EMPTY_STRUCT request;
+
+    struct response
+    {
+      std::string address;
+
+      void serialize(ISerializer& s) {
+        KV_MEMBER(address)
+      }
+    };
+  };
+
+  struct COMMAND_RPC_VIEW_KEYS
+  {
+    typedef CryptoNote::EMPTY_STRUCT request;
+
+    struct response
+    {
+      std::string view_key;
+      std::string spend_key;
+
+      void serialize(ISerializer& s) {
+        KV_MEMBER(view_key)
+        KV_MEMBER(spend_key)
+      }
+
+    };
+  };
+
 }
 }

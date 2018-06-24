@@ -1,19 +1,19 @@
-// Copyright (c) 2012-2017, The CryptoNote developers, The KEPL developers
+// Copyright (c) 2012-2017, The CryptoNote developers, The Bytecoin developers
 //
-// This file is part of KEPL.
+// This file is part of Bytecoin.
 //
-// KEPL is free software: you can redistribute it and/or modify
+// Bytecoin is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// KEPL is distributed in the hope that it will be useful,
+// Bytecoin is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with KEPL.  If not, see <http://www.gnu.org/licenses/>.
+// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "WalletService.h"
 
@@ -34,6 +34,7 @@
 #include "CryptoNoteCore/CryptoNoteFormatUtils.h"
 #include "CryptoNoteCore/CryptoNoteBasicImpl.h"
 #include "CryptoNoteCore/TransactionExtra.h"
+#include "CryptoNoteCore/Account.h"
 
 #include <System/EventLock.h>
 #include <System/RemoteContext.h>
@@ -46,6 +47,8 @@
 #include "Wallet/WalletErrors.h"
 #include "Wallet/WalletUtils.h"
 #include "WalletServiceErrorCategory.h"
+
+#include "Mnemonics/electrum-words.h"
 
 namespace PaymentService {
 
@@ -80,6 +83,7 @@ Crypto::Hash parsePaymentId(const std::string& paymentIdStr) {
 
   Crypto::Hash paymentId;
   bool r = Common::podFromHex(paymentIdStr, paymentId);
+  if (r) {}
   assert(r);
 
   return paymentId;
@@ -194,7 +198,9 @@ std::vector<CryptoNote::TransactionsInBlockInfo> filterTransactions(
       }
     }
 
-    result.push_back(std::move(item));
+    if (!block.transactions.empty()) {
+      result.push_back(std::move(item));
+    }
   }
 
   return result;
@@ -276,6 +282,34 @@ void validateAddresses(const std::vector<std::string>& addresses, const CryptoNo
   }
 }
 
+void validateMixin(const uint32_t mixin, const uint32_t height, Logging::LoggerRef logger) {
+    uint64_t minMixin = 0;
+    uint64_t maxMixin = std::numeric_limits<uint64_t>::max();
+
+    // if (height >= CryptoNote::parameters::MIXIN_LIMITS_V2_HEIGHT)
+    // {
+    //     minMixin = CryptoNote::parameters::MINIMUM_MIXIN_V2;
+    //     maxMixin = CryptoNote::parameters::MAXIMUM_MIXIN_V2;
+    // }
+    // else if (height >= CryptoNote::parameters::MIXIN_LIMITS_V1_HEIGHT)
+    // {
+    //     minMixin = CryptoNote::parameters::MINIMUM_MIXIN_V1;
+    //     maxMixin = CryptoNote::parameters::MAXIMUM_MIXIN_V1;
+    // }
+    if (mixin < minMixin)
+    {
+        logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Mixin of " << mixin
+            << " under minimum mixin threshold of " << minMixin;
+        throw std::system_error(make_error_code(CryptoNote::error::MIXIN_BELOW_THRESHOLD));
+    }
+    else if (mixin > maxMixin)
+    {
+        logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Mixin of " << mixin
+          << " above maximum mixin threshold of " << maxMixin;
+        throw std::system_error(make_error_code(CryptoNote::error::MIXIN_ABOVE_THRESHOLD));
+    }
+}
+
 std::string getValidatedTransactionExtraString(const std::string& extraString) {
   std::vector<uint8_t> binary;
   if (!Common::fromHex(extraString, binary)) {
@@ -318,12 +352,68 @@ void generateNewWallet(const CryptoNote::Currency& currency, const WalletConfigu
   CryptoNote::IWallet* wallet = new CryptoNote::WalletGreen(dispatcher, currency, *nodeStub, logger);
   std::unique_ptr<CryptoNote::IWallet> walletGuard(wallet);
 
-  log(Logging::INFO, Logging::BRIGHT_WHITE) << "Generating new wallet";
+  std::string address;
+  if (conf.secretSpendKey.empty() && conf.secretViewKey.empty() && conf.mnemonicSeed.empty())
+  {
+    log(Logging::INFO, Logging::BRIGHT_WHITE) << "Generating new wallet";
 
-  wallet->initialize(conf.walletFile, conf.walletPassword);
-  auto address = wallet->createAddress();
+    Crypto::SecretKey private_view_key;
+    CryptoNote::KeyPair spendKey;
 
-  log(Logging::INFO, Logging::BRIGHT_WHITE) << "New wallet is generated. Address: " << address;
+    Crypto::generate_keys(spendKey.publicKey, spendKey.secretKey);
+    CryptoNote::AccountBase::generateViewFromSpend(spendKey.secretKey, private_view_key);
+
+    wallet->initializeWithViewKey(conf.walletFile, conf.walletPassword, private_view_key);
+    address = wallet->createAddress(spendKey.secretKey);
+
+	  log(Logging::INFO, Logging::BRIGHT_WHITE) << "New wallet is generated. Address: " << address;
+  }
+  else if (!conf.mnemonicSeed.empty())
+  {
+    log(Logging::INFO, Logging::BRIGHT_WHITE) << "Attempting to import wallet from mnemonic seed";
+
+    Crypto::SecretKey private_spend_key;
+    Crypto::SecretKey private_view_key;
+
+    if (!crypto::ElectrumWords::is_valid_mnemonic(conf.mnemonicSeed, private_spend_key))
+    {
+      return;
+    }
+
+    CryptoNote::AccountBase::generateViewFromSpend(private_spend_key, private_view_key);
+    wallet->initializeWithViewKey(conf.walletFile, conf.walletPassword, private_view_key);
+    address = wallet->createAddress(private_spend_key);
+    log(Logging::INFO, Logging::BRIGHT_WHITE) << "Imported wallet successfully.";
+  }
+  else
+  {
+	  if (conf.secretSpendKey.empty() || conf.secretViewKey.empty())
+	  {
+		  log(Logging::ERROR, Logging::BRIGHT_RED) << "Need both secret spend key and secret view key.";
+		  return;
+	  }
+    else
+	  {
+		  log(Logging::INFO, Logging::BRIGHT_WHITE) << "Attemping to import wallet from keys";
+		  Crypto::Hash private_spend_key_hash;
+		  Crypto::Hash private_view_key_hash;
+		  size_t size;
+		  if (!Common::fromHex(conf.secretSpendKey, &private_spend_key_hash, sizeof(private_spend_key_hash), size) || size != sizeof(private_spend_key_hash)) {
+			  log(Logging::ERROR, Logging::BRIGHT_RED) << "Invalid spend key";
+			  return;
+		  }
+		  if (!Common::fromHex(conf.secretViewKey, &private_view_key_hash, sizeof(private_view_key_hash), size) || size != sizeof(private_spend_key_hash)) {
+			  log(Logging::ERROR, Logging::BRIGHT_RED) << "Invalid view key";
+			  return;
+		  }
+		  Crypto::SecretKey private_spend_key = *(struct Crypto::SecretKey *) &private_spend_key_hash;
+		  Crypto::SecretKey private_view_key = *(struct Crypto::SecretKey *) &private_view_key_hash;
+
+		  wallet->initializeWithViewKey(conf.walletFile, conf.walletPassword, private_view_key);
+		  address = wallet->createAddress(private_spend_key);
+		  log(Logging::INFO, Logging::BRIGHT_WHITE) << "Imported wallet successfully.";
+	  }
+  }
 
   wallet->save(CryptoNote::WalletSaveLevel::SAVE_KEYS_ONLY);
   log(Logging::INFO, Logging::BRIGHT_WHITE) << "Wallet is saved";
@@ -675,6 +765,35 @@ std::error_code WalletService::getViewKey(std::string& viewSecretKey) {
   return std::error_code();
 }
 
+std::error_code WalletService::getMnemonicSeed(const std::string& address, std::string& mnemonicSeed) {
+  try {
+    System::EventLock lk(readyEvent);
+    CryptoNote::KeyPair key = wallet.getAddressSpendKey(address);
+    CryptoNote::KeyPair viewKey = wallet.getViewKey();
+
+    Crypto::SecretKey deterministic_private_view_key;
+
+    CryptoNote::AccountBase::generateViewFromSpend(key.secretKey, deterministic_private_view_key);
+
+    bool deterministic_private_keys = deterministic_private_view_key == viewKey.secretKey;
+
+    if (deterministic_private_keys) {
+      crypto::ElectrumWords::bytes_to_words(key.secretKey, mnemonicSeed, "English");
+    } else {
+      /* Have to be able to derive view key from spend key to create a mnemonic
+         seed, due to being able to generate multiple addresses we can't do
+         this in walletd as the default */
+      logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Your private keys are not deterministic and so a mnemonic seed cannot be generated!";
+      return make_error_code(CryptoNote::error::WalletServiceErrorCode::KEYS_NOT_DETERMINISTIC);
+    }
+  } catch (std::system_error& x) {
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while getting mnemonic seed: " << x.what();
+    return x.code();
+  }
+
+  return std::error_code();
+}
+
 std::error_code WalletService::getTransactionHashes(const std::vector<std::string>& addresses, const std::string& blockHashString,
   uint32_t blockCount, const std::string& paymentId, std::vector<TransactionHashesInBlockRpcInfo>& transactionHashes) {
   try {
@@ -825,6 +944,8 @@ std::error_code WalletService::sendTransaction(const SendTransaction::Request& r
     if (!request.changeAddress.empty()) {
       validateAddresses({ request.changeAddress }, currency, logger);
     }
+
+    validateMixin(request.anonymity, node.getLastKnownBlockHeight(), logger);
 
     CryptoNote::TransactionParameters sendParams;
     if (!request.paymentId.empty()) {
@@ -1118,7 +1239,7 @@ void WalletService::replaceWithNewWallet(const Crypto::SecretKey& viewSecretKey)
 
     if (!boost::filesystem::exists(backup)) {
       boost::filesystem::rename(config.walletFile, backup);
-      logger(Logging::DEBUGGING) << "Walled file '" << config.walletFile  << "' backed up to '" << backup << '\'';
+      logger(Logging::DEBUGGING) << "Wallet file '" << config.walletFile  << "' backed up to '" << backup << '\'';
       break;
     }
   }

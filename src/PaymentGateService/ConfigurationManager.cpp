@@ -1,19 +1,19 @@
-// Copyright (c) 2012-2017, The CryptoNote developers, The KEPL developers
+// Copyright (c) 2012-2017, The CryptoNote developers, The Bytecoin developers
 //
-// This file is part of KEPL.
+// This file is part of Bytecoin.
 //
-// KEPL is free software: you can redistribute it and/or modify
+// Bytecoin is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// KEPL is distributed in the hope that it will be useful,
+// Bytecoin is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with KEPL.  If not, see <http://www.gnu.org/licenses/>.
+// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "ConfigurationManager.h"
 
@@ -54,7 +54,6 @@ bool ConfigurationManager::init(int argc, char** argv) {
 
   Configuration::initOptions(cmdGeneralOptions);
   Configuration::initOptions(confGeneralOptions);
-
   po::options_description netNodeOptions("Local Node Options");
   CryptoNote::NetNodeConfig::initOptions(netNodeOptions);
   
@@ -77,41 +76,30 @@ bool ConfigurationManager::init(int argc, char** argv) {
   }
 
   if (cmdOptions.count("version") > 0) {
-    std::cout << "walletd v" << PROJECT_VERSION_LONG;
+    std::cout << "walletd v" << PROJECT_VERSION_LONG << std::endl;
     return false;
   }
 
+  po::variables_map allOptions;
   if (cmdOptions.count("config")) {
     std::ifstream confStream(cmdOptions["config"].as<std::string>(), std::ifstream::in);
     if (!confStream.good()) {
       throw ConfigurationError("Cannot open configuration file");
     }
-
-    po::variables_map confOptions;
-    po::store(po::parse_config_file(confStream, confOptionsDesc), confOptions);
-    po::notify(confOptions);
-
-    gateConfiguration.init(confOptions);
-    netNodeConfig.init(confOptions);
-    remoteNodeConfig.init(confOptions);
-
-    netNodeConfig.setTestnet(confOptions["testnet"].as<bool>());
-    startInprocess = confOptions["local"].as<bool>();
+    po::store(po::parse_config_file(confStream, confOptionsDesc), allOptions);
+    po::notify(allOptions);
   }
 
-  //command line options should override options from config file
-  gateConfiguration.init(cmdOptions);
-  netNodeConfig.init(cmdOptions);
-  remoteNodeConfig.init(cmdOptions);
-  dataDir = command_line::get_arg(cmdOptions, command_line::arg_data_dir);
+  po::store(po::parse_command_line(argc, argv, cmdOptionsDesc), allOptions);
+  po::notify(allOptions);
 
-  if (cmdOptions["testnet"].as<bool>()) {
-    netNodeConfig.setTestnet(true);
-  }
+  gateConfiguration.init(allOptions);
+  netNodeConfig.init(allOptions);
+  remoteNodeConfig.init(allOptions);
+  dataDir = command_line::get_arg(allOptions, command_line::arg_data_dir);
 
-  if (cmdOptions["local"].as<bool>()) {
-    startInprocess = true;
-  }
+  netNodeConfig.setTestnet(allOptions["testnet"].as<bool>());
+  startInprocess = allOptions["local"].as<bool>();
 
   return true;
 }

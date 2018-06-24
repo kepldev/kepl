@@ -1,19 +1,19 @@
-// Copyright (c) 2012-2017, The CryptoNote developers, The KEPL developers
+// Copyright (c) 2012-2017, The CryptoNote developers, The Bytecoin developers
 //
-// This file is part of KEPL.
+// This file is part of Bytecoin.
 //
-// KEPL is free software: you can redistribute it and/or modify
+// Bytecoin is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// KEPL is distributed in the hope that it will be useful,
+// Bytecoin is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with KEPL.  If not, see <http://www.gnu.org/licenses/>.
+// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
@@ -86,6 +86,15 @@ public:
   virtual size_t makeTransaction(const TransactionParameters& sendingTransaction) override;
   virtual void commitTransaction(size_t) override;
   virtual void rollbackUncommitedTransaction(size_t) override;
+  bool txIsTooLarge(const TransactionParameters& sendingTransaction);
+  size_t getTxSize(const TransactionParameters &sendingTransaction);
+  size_t getMaxTxSize();
+  void updateInternalCache();
+  void clearCaches(bool clearTransactions, bool clearCachedData);
+  void clearCacheAndShutdown();
+  void createViewWallet(const std::string &path, const std::string &password,
+                        const std::string address, 
+                        const Crypto::SecretKey &viewSecretKey);
 
   virtual void start() override;
   virtual void stop() override;
@@ -107,7 +116,6 @@ protected:
   void throwIfStopped() const;
   void throwIfTrackingMode() const;
   void doShutdown();
-  void clearCaches(bool clearTransactions, bool clearCachedData);
   void convertAndLoadWalletFile(const std::string& path, std::ifstream&& walletFileStream);
   static void decryptKeyPair(const EncryptedWalletRecord& cipher, Crypto::PublicKey& publicKey, Crypto::SecretKey& secretKey,
     uint64_t& creationTimestamp, const Crypto::chacha8_key& key);
@@ -121,6 +129,7 @@ protected:
   void initWithKeys(const std::string& path, const std::string& password, const Crypto::PublicKey& viewPublicKey, const Crypto::SecretKey& viewSecretKey);
   std::string doCreateAddress(const Crypto::PublicKey& spendPublicKey, const Crypto::SecretKey& spendSecretKey, uint64_t creationTimestamp);
   std::vector<std::string> doCreateAddressList(const std::vector<NewAddressData>& addressDataList);
+
 
   struct InputInfo {
     TransactionTypes::InputKeyInfo keyInfo;
@@ -367,8 +376,6 @@ protected:
   uint64_t m_actualBalance;
   uint64_t m_pendingBalance;
 
-  uint64_t m_upperTransactionSizeLimit;
-  uint32_t m_totalBlockCount;
   uint32_t m_transactionSoftLockTime;
 
   BlockHashesContainer m_blockchain;

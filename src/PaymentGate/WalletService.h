@@ -1,19 +1,19 @@
-// Copyright (c) 2012-2017, The CryptoNote developers, The KEPL developers
+// Copyright (c) 2012-2017, The CryptoNote developers, The Bytecoin developers
 //
-// This file is part of KEPL.
+// This file is part of Bytecoin.
 //
-// KEPL is free software: you can redistribute it and/or modify
+// Bytecoin is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// KEPL is distributed in the hope that it will be useful,
+// Bytecoin is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with KEPL.  If not, see <http://www.gnu.org/licenses/>.
+// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
@@ -42,6 +42,10 @@ namespace PaymentService {
 struct WalletConfiguration {
   std::string walletFile;
   std::string walletPassword;
+  bool syncFromZero;
+  std::string secretViewKey;
+  std::string secretSpendKey;
+  std::string mnemonicSeed;
 };
 
 void generateNewWallet(const CryptoNote::Currency& currency, const WalletConfiguration& conf, Logging::ILogger& logger, System::Dispatcher& dispatcher);
@@ -71,6 +75,7 @@ public:
   std::error_code getBalance(uint64_t& availableBalance, uint64_t& lockedAmount);
   std::error_code getBlockHashes(uint32_t firstBlockIndex, uint32_t blockCount, std::vector<std::string>& blockHashes);
   std::error_code getViewKey(std::string& viewSecretKey);
+  std::error_code getMnemonicSeed(const std::string& address, std::string& mnemonicSeed);
   std::error_code getTransactionHashes(const std::vector<std::string>& addresses, const std::string& blockHash,
     uint32_t blockCount, const std::string& paymentId, std::vector<TransactionHashesInBlockRpcInfo>& transactionHashes);
   std::error_code getTransactionHashes(const std::vector<std::string>& addresses, uint32_t firstBlockIndex,

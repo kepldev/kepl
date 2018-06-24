@@ -56,7 +56,7 @@ const size_t   DIFFICULTY_CUT                                = 60;  // timestamp
 const size_t   DIFFICULTY_LAG                                = 15;  // !!!
 static_assert(2 * DIFFICULTY_CUT <= DIFFICULTY_WINDOW - 2, "Bad DIFFICULTY_WINDOW or DIFFICULTY_CUT");
 
-const size_t   MAX_BLOCK_SIZE_INITIAL                        =  20 * 1024;
+const size_t   MAX_BLOCK_SIZE_INITIAL                        = 20 * 1024;
 const uint64_t MAX_BLOCK_SIZE_GROWTH_SPEED_NUMERATOR         = 100 * 1024;
 const uint64_t MAX_BLOCK_SIZE_GROWTH_SPEED_DENOMINATOR       = 365 * 24 * 60 * 60 / DIFFICULTY_TARGET;
 
@@ -86,6 +86,26 @@ const char     CRYPTONOTE_BLOCKINDEXES_FILENAME[]            = "blockindexes.bin
 const char     CRYPTONOTE_POOLDATA_FILENAME[]                = "poolstate.bin";
 const char     P2P_NET_DATA_FILENAME[]                       = "p2pstate.bin";
 const char     MINER_CONFIG_FILE_NAME[]                      = "miner_conf.json";
+
+const uint64_t DEFAULT_MIXIN                                 =  1;
+
+/* The index in the FORK_HEIGHTS array that this version of the software will
+   support. For example, if CURRENT_FORK_INDEX is 3, this version of the
+   software will support the fork at 600,000 blocks. */
+const uint8_t CURRENT_FORK_INDEX = 3;
+
+/* Block heights we are going to have hard forks at */
+const uint64_t FORK_HEIGHTS[] = {
+    17000,
+    100000,
+    300000,
+    999999,
+};
+
+/* Make sure CURRENT_FORK_INDEX is a valid index */
+static_assert(CURRENT_FORK_INDEX < (sizeof(FORK_HEIGHTS)/sizeof(*FORK_HEIGHTS)), "CURRENT_FORK_INDEX out of range of FORK_HEIGHTS!");
+
+
 } // parameters
 
 const char     CRYPTONOTE_NAME[]                             = "kepl";

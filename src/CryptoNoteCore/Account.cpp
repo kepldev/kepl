@@ -1,22 +1,23 @@
-// Copyright (c) 2012-2017, The CryptoNote developers, The KEPL developers
+// Copyright (c) 2012-2017, The CryptoNote developers, The Bytecoin developers
 //
-// This file is part of KEPL.
+// This file is part of Bytecoin.
 //
-// KEPL is free software: you can redistribute it and/or modify
+// Bytecoin is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// KEPL is distributed in the hope that it will be useful,
+// Bytecoin is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with KEPL.  If not, see <http://www.gnu.org/licenses/>.
+// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "Account.h"
 #include "CryptoNoteSerialization.h"
+#include "crypto/keccak.c"
 
 namespace CryptoNote {
 //-----------------------------------------------------------------
@@ -29,9 +30,29 @@ void AccountBase::setNull() {
 }
 //-----------------------------------------------------------------
 void AccountBase::generate() {
+
   Crypto::generate_keys(m_keys.address.spendPublicKey, m_keys.spendSecretKey);
-  Crypto::generate_keys(m_keys.address.viewPublicKey, m_keys.viewSecretKey);
+
+  /* We derive the view secret key by taking our spend secret key, hashing
+     with keccak-256, and then using this as the seed to generate a new set
+     of keys - the public and private view keys. See generate_keys_from_seed */
+
+  generateViewFromSpend(m_keys.spendSecretKey, m_keys.viewSecretKey, m_keys.address.viewPublicKey);
   m_creation_timestamp = time(NULL);
+
+}
+void AccountBase::generateViewFromSpend(Crypto::SecretKey &spend, Crypto::SecretKey &viewSecret, Crypto::PublicKey &viewPublic) {
+  Crypto::SecretKey viewKeySeed;
+
+  keccak((uint8_t *)&spend, sizeof(spend), (uint8_t *)&viewKeySeed, sizeof(viewKeySeed));
+
+  Crypto::generate_keys_from_seed(viewPublic, viewSecret, viewKeySeed);
+}
+
+void AccountBase::generateViewFromSpend(Crypto::SecretKey &spend, Crypto::SecretKey &viewSecret) {
+  /* If we don't need the pub key */
+  Crypto::PublicKey unused_dummy_variable;
+  generateViewFromSpend(spend, viewSecret, unused_dummy_variable);
 }
 //-----------------------------------------------------------------
 const AccountKeys &AccountBase::getAccountKeys() const {

@@ -1,19 +1,19 @@
-// Copyright (c) 2012-2017, The CryptoNote developers, The KEPL developers
+// Copyright (c) 2012-2017, The CryptoNote developers, The Bytecoin developers
 //
-// This file is part of KEPL.
+// This file is part of Bytecoin.
 //
-// KEPL is free software: you can redistribute it and/or modify
+// Bytecoin is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// KEPL is distributed in the hope that it will be useful,
+// Bytecoin is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with KEPL.  If not, see <http://www.gnu.org/licenses/>.
+// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "CryptoNoteProtocolHandler.h"
 
@@ -134,9 +134,10 @@ CryptoNoteProtocolHandler::CryptoNoteProtocolHandler(const Currency& currency, S
   m_synchronized(false),
   m_stop(false),
   m_observedHeight(0),
+  m_blockchainHeight(0),
   m_peersCount(0),
   logger(log, "protocol") {
-  
+
   if (!m_p2p) {
     m_p2p = &m_p2p_stub;
   }
@@ -181,7 +182,7 @@ void CryptoNoteProtocolHandler::onConnectionClosed(CryptoNoteConnectionContext& 
 void CryptoNoteProtocolHandler::stop() {
   m_stop = true;
 }
-    
+
 bool CryptoNoteProtocolHandler::start_sync(CryptoNoteConnectionContext& context) {
   logger(Logging::TRACE) << context << "Starting synchronization";
 
@@ -206,13 +207,13 @@ void CryptoNoteProtocolHandler::log_connections() {
   std::stringstream ss;
 
   ss << std::setw(25) << std::left << "Remote Host"
-    << std::setw(20) << "Peer id"
+    << std::setw(20) << "Peer ID"
     << std::setw(25) << "Recv/Sent (inactive,sec)"
     << std::setw(25) << "State"
     << std::setw(20) << "Lifetime(seconds)" << ENDL;
 
   m_p2p->for_each_connection([&](const CryptoNoteConnectionContext& cntxt, PeerIdType peer_id) {
-    ss << std::setw(25) << std::left << std::string(cntxt.m_is_income ? "[INC]" : "[OUT]") +
+    ss << std::setw(25) << std::left << std::string(cntxt.m_is_income ? "[INCOMING]" : "[OUTGOING]") +
       Common::ipAddressToString(cntxt.m_remote_ip) + ":" + std::to_string(cntxt.m_remote_port)
       << std::setw(20) << std::hex << peer_id
       // << std::setw(25) << std::to_string(cntxt.m_recv_cnt) + "(" + std::to_string(time(NULL) - cntxt.m_last_recv) + ")" + "/" + std::to_string(cntxt.m_send_cnt) + "(" + std::to_string(time(NULL) - cntxt.m_last_send) + ")"
@@ -241,10 +242,11 @@ bool CryptoNoteProtocolHandler::process_payload_sync_data(const CORE_SYNC_DATA& 
   } else {
     int64_t diff = static_cast<int64_t>(hshd.current_height) - static_cast<int64_t>(get_current_blockchain_height());
 
-    logger(diff >= 0 ? (is_inital ? Logging::INFO : Logging::DEBUGGING) : Logging::TRACE, Logging::BRIGHT_YELLOW) << context <<
-      "Sync data returned unknown top block: " << get_current_blockchain_height() << " -> " << hshd.current_height
-      << " [" << std::abs(diff) << " blocks (" << std::abs(diff) / (24 * 60 * 60 / m_currency.difficultyTarget()) << " days) "
-      << (diff >= 0 ? std::string("behind") : std::string("ahead")) << "] " << std::endl << "SYNCHRONIZATION started";
+    logger(diff >= 0 ? (is_inital ? Logging::INFO : Logging::DEBUGGING) : Logging::TRACE, Logging::BRIGHT_GREEN) << context <<
+      "Your Kepl node is syncing with the network. You are "
+      // << get_current_blockchain_height() << " -> " << hshd.current_height
+      << std::abs(diff) << " blocks (" << std::abs(diff) / (24 * 60 * 60 / m_currency.difficultyTarget()) << " days) "
+      << (diff >= 0 ? std::string("behind") : std::string("ahead of")) << " the Hare. Slow and steady wins the race! " << std::endl;
 
     logger(Logging::DEBUGGING) << "Remote top block height: " << hshd.current_height << ", id: " << hshd.top_id;
     //let the socket to send response to handshake, but request callback, to let send request data after response
@@ -356,7 +358,7 @@ int CryptoNoteProtocolHandler::handle_notify_new_transactions(int command, NOTIF
 
   for (auto tx_blob_it = arg.txs.begin(); tx_blob_it != arg.txs.end();) {
     if (!m_core.addTransactionToPool(*tx_blob_it)) {
-      logger(Logging::INFO) << context << "Tx verification failed";
+      logger(Logging::DEBUGGING) << context << "Tx verification failed";
       tx_blob_it = arg.txs.erase(tx_blob_it);
     } else {
       ++tx_blob_it;
@@ -564,7 +566,7 @@ bool CryptoNoteProtocolHandler::request_missing_objects(CryptoNoteConnectionCont
         << "\r\nm_last_response_height=" << context.m_last_response_height
         << "\r\nm_remote_blockchain_height=" << context.m_remote_blockchain_height
         << "\r\nm_needed_objects.size()=" << context.m_needed_objects.size()
-        << "\r\nm_requested_objects.size()=" << context.m_requested_objects.size() 
+        << "\r\nm_requested_objects.size()=" << context.m_requested_objects.size()
         << "\r\non connection [" << context << "]";
       return false;
     }
@@ -572,7 +574,7 @@ bool CryptoNoteProtocolHandler::request_missing_objects(CryptoNoteConnectionCont
     requestMissingPoolTransactions(context);
 
     context.m_state = CryptoNoteConnectionContext::state_normal;
-    logger(Logging::INFO, Logging::BRIGHT_GREEN) << context << "SYNCHRONIZED OK";
+    logger(Logging::INFO, Logging::BRIGHT_GREEN) << context << "Successfully synchronized with the Kepl Network.";
     on_connection_synchronized();
   }
   return true;
@@ -581,14 +583,18 @@ bool CryptoNoteProtocolHandler::request_missing_objects(CryptoNoteConnectionCont
 bool CryptoNoteProtocolHandler::on_connection_synchronized() {
   bool val_expected = false;
   if (m_synchronized.compare_exchange_strong(val_expected, true)) {
-    logger(Logging::INFO) << ENDL << "**********************************************************************" << ENDL
-      << "You are now synchronized with the network. You may now start simplewallet." << ENDL
-      << ENDL
-      << "Please note, that the blockchain will be saved only after you quit the daemon with \"exit\" command or if you use \"save\" command." << ENDL
-      << "Otherwise, you will possibly need to synchronize the blockchain again." << ENDL
-      << ENDL
-      << "Use \"help\" command to see the list of available commands." << ENDL
-      << "**********************************************************************";
+    logger(Logging::INFO)
+      << ENDL ;
+      logger(INFO, BRIGHT_MAGENTA) << "===[ Kepl Tip! ]=============================" << ENDL ;
+      logger(INFO, WHITE) << " Always exit kepld and Simplewallet with the \"exit\" command to preserve your chain and wallet data." << ENDL ;
+      logger(INFO, WHITE) << " Use the \"help\" command to see a list of available commands." << ENDL ;
+      logger(INFO, WHITE) << " Use the \"export_keys\" command in Simplewallet to display your keys for restoring a corrupted wallet." << ENDL ;
+      logger(INFO, WHITE) << " If you need more assistance, visit the #HELP channel in the KEPL Discord Chat - https://discord.gg/mjeQ5Q2" << ENDL ;
+      logger(INFO, BRIGHT_MAGENTA) << "===================================================" << ENDL << ENDL ;
+
+      logger(INFO, BRIGHT_GREEN) <<
+      "\n\n |____/  |______ |_____] |     \n"
+      " |    \\_ |______ |       |_____\n" << ENDL;
 
     m_observerManager.notify(&ICryptoNoteProtocolObserver::blockchainSynchronized, m_core.getTopBlockIndex());
   }
@@ -689,7 +695,12 @@ void CryptoNoteProtocolHandler::updateObservedHeight(uint32_t peerHeight, const 
     std::lock_guard<std::mutex> lock(m_observedHeightMutex);
 
     uint32_t height = m_observedHeight;
-    if (peerHeight > context.m_remote_blockchain_height) {
+    if (context.m_remote_blockchain_height != 0 && context.m_last_response_height <= context.m_remote_blockchain_height - 1) {
+      m_observedHeight = context.m_remote_blockchain_height - 1;
+      if (m_observedHeight != height) {
+        updated = true;
+      }
+    } else if (peerHeight > context.m_remote_blockchain_height) {
       m_observedHeight = std::max(m_observedHeight, peerHeight);
       if (m_observedHeight != height) {
         updated = true;
@@ -702,7 +713,16 @@ void CryptoNoteProtocolHandler::updateObservedHeight(uint32_t peerHeight, const 
       }
     }
   }
+  
+  {
+    std::lock_guard<std::mutex> lock(m_blockchainHeightMutex);
+    if (peerHeight > m_blockchainHeight) {
+      m_blockchainHeight = peerHeight;
+      logger(Logging::INFO, Logging::BRIGHT_GREEN) << "New Top Block Detected: " << peerHeight; 
+    }
+  }
 
+  
   if (updated) {
     logger(TRACE) << "Observed height updated: " << m_observedHeight;
     m_observerManager.notify(&ICryptoNoteProtocolObserver::lastKnownBlockHeightUpdated, m_observedHeight);
@@ -719,11 +739,19 @@ void CryptoNoteProtocolHandler::recalculateMaxObservedHeight(const CryptoNoteCon
   });
 
   m_observedHeight = std::max(peerHeight, m_core.getTopBlockIndex() + 1);
+    if (context.m_state == CryptoNoteConnectionContext::state_normal) {
+      m_observedHeight = m_core.getTopBlockIndex();
+    }
 }
 
 uint32_t CryptoNoteProtocolHandler::getObservedHeight() const {
   std::lock_guard<std::mutex> lock(m_observedHeightMutex);
   return m_observedHeight;
+};
+
+uint32_t CryptoNoteProtocolHandler::getBlockchainHeight() const {
+  std::lock_guard<std::mutex> lock(m_blockchainHeightMutex);
+  return m_blockchainHeight;  
 };
 
 bool CryptoNoteProtocolHandler::addObserver(ICryptoNoteProtocolObserver* observer) {

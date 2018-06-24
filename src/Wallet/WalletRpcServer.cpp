@@ -1,19 +1,19 @@
-// Copyright (c) 2012-2017, The CryptoNote developers, The KEPL developers
+// Copyright (c) 2012-2017, The CryptoNote developers, The Bytecoin developers
 //
-// This file is part of KEPL.
+// This file is part of Bytecoin.
 //
-// KEPL is free software: you can redistribute it and/or modify
+// Bytecoin is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// KEPL is distributed in the hope that it will be useful,
+// Bytecoin is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with KEPL.  If not, see <http://www.gnu.org/licenses/>.
+// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "WalletRpcServer.h"
 
@@ -36,26 +36,33 @@ namespace Tools {
 
 const command_line::arg_descriptor<uint16_t> wallet_rpc_server::arg_rpc_bind_port = { "rpc-bind-port", "Starts wallet as rpc server for wallet operations, sets bind port for server", 0, true };
 const command_line::arg_descriptor<std::string> wallet_rpc_server::arg_rpc_bind_ip = { "rpc-bind-ip", "Specify ip to bind rpc server", "127.0.0.1" };
+const command_line::arg_descriptor<std::string> wallet_rpc_server::arg_rpc_password = { "rpc-password", "Specify the password to access the rpc server.", "", true };
+const command_line::arg_descriptor<bool> wallet_rpc_server::arg_rpc_legacy_security = { "rpc-legacy-security", "Enable legacy mode (no password for RPC). WARNING: INSECURE. USE ONLY AS A LAST RESORT.", false};
+const command_line::arg_descriptor<bool>      arg_allow_extended_rpc  = {"allow-extended-rpc", "Allow RPC access to the wallet address and view/spend keys", false};
+
 
 void wallet_rpc_server::init_options(boost::program_options::options_description& desc) {
   command_line::add_arg(desc, arg_rpc_bind_ip);
   command_line::add_arg(desc, arg_rpc_bind_port);
+  command_line::add_arg(desc, arg_rpc_password);
+  command_line::add_arg(desc, arg_rpc_legacy_security);
+  command_line::add_arg(desc, arg_allow_extended_rpc);
 }
 //------------------------------------------------------------------------------------------------------------------------------
 wallet_rpc_server::wallet_rpc_server(
-  System::Dispatcher& dispatcher, 
-  Logging::ILogger& log, 
+  System::Dispatcher& dispatcher,
+  Logging::ILogger& log,
   CryptoNote::IWalletLegacy&w,
-  CryptoNote::INode& n, 
-  CryptoNote::Currency& currency, 
+  CryptoNote::INode& n,
+  CryptoNote::Currency& currency,
   const std::string& walletFile)
-  : 
-  HttpServer(dispatcher, log), 
-  logger(log, "WalletRpc"), 
-  m_dispatcher(dispatcher), 
-  m_stopComplete(dispatcher), 
+  :
+  HttpServer(dispatcher, log),
+  logger(log, "WalletRpc"),
+  m_dispatcher(dispatcher),
+  m_stopComplete(dispatcher),
   m_wallet(w),
-  m_node(n), 
+  m_node(n),
   m_currency(currency),
   m_walletFilename(walletFile) {
 }
@@ -78,6 +85,11 @@ void wallet_rpc_server::send_stop_signal() {
 bool wallet_rpc_server::handle_command_line(const boost::program_options::variables_map& vm) {
   m_bind_ip = command_line::get_arg(vm, arg_rpc_bind_ip);
   m_port = command_line::get_arg(vm, arg_rpc_bind_port);
+  m_legacy = command_line::get_arg(vm, arg_rpc_legacy_security);
+  if (!m_legacy) {
+    m_password = command_line::get_arg(vm, arg_rpc_password);
+  }
+  m_allow_extended_rpc = command_line::get_arg(vm, arg_allow_extended_rpc);
   return true;
 }
 //------------------------------------------------------------------------------------------------------------------------------
@@ -96,19 +108,38 @@ void wallet_rpc_server::processRequest(const CryptoNote::HttpRequest& request, C
 
   JsonRpcRequest jsonRequest;
   JsonRpcResponse jsonResponse;
+  std::string clientPassword;
 
   try {
     jsonRequest.parseRequest(request.getBody());
     jsonResponse.setId(jsonRequest.getId());
+	
+    if (!m_legacy) {
+      const JsonRpc::OptionalPassword& clientPasswordObject = jsonRequest.getPassword();
+      if (!clientPasswordObject.is_initialized()) {
+        throw JsonRpcError(errInvalidPassword);
+      }
+      if (!clientPasswordObject.get().isString()) {
+        throw JsonRpcError(errInvalidPassword);
+      }
+      clientPassword = clientPasswordObject.get().getString();
+      if (clientPassword != m_password) {
+        throw JsonRpcError(errInvalidPassword);
+      }
+    }
 
     static std::unordered_map<std::string, JsonMemberMethod> s_methods = {
       { "getbalance", makeMemberMethod(&wallet_rpc_server::on_getbalance) },
-      { "transfer", makeMemberMethod(&wallet_rpc_server::on_transfer) },
       { "store", makeMemberMethod(&wallet_rpc_server::on_store) },
       { "get_payments", makeMemberMethod(&wallet_rpc_server::on_get_payments) },
       { "get_transfers", makeMemberMethod(&wallet_rpc_server::on_get_transfers) },
       { "get_height", makeMemberMethod(&wallet_rpc_server::on_get_height) },
-      { "reset", makeMemberMethod(&wallet_rpc_server::on_reset) }
+      // below are the restricted methods, use --enable-extended-rpc
+      { "transfer", makeMemberMethod(&wallet_rpc_server::on_transfer) },
+      { "reset", makeMemberMethod(&wallet_rpc_server::on_reset) },
+      { "stop_wallet", makeMemberMethod(&wallet_rpc_server::on_stop_wallet) },
+      { "get_address", makeMemberMethod(&wallet_rpc_server::on_get_address) },
+      { "view_keys", makeMemberMethod(&wallet_rpc_server::on_view_keys) }
     };
 
     auto it = s_methods.find(jsonRequest.getMethod());
@@ -135,6 +166,11 @@ bool wallet_rpc_server::on_getbalance(const wallet_rpc::COMMAND_RPC_GET_BALANCE:
 }
 //------------------------------------------------------------------------------------------------------------------------------
 bool wallet_rpc_server::on_transfer(const wallet_rpc::COMMAND_RPC_TRANSFER::request& req, wallet_rpc::COMMAND_RPC_TRANSFER::response& res) {
+  
+  if(!m_allow_extended_rpc) {
+    throw JsonRpc::JsonRpcError(WALLET_RPC_ERROR_METHOD_RESTRICTED, "Unable to invoke extended RPC method without explicit --allow-extended-rpc flag.");
+  }
+  
   std::vector<CryptoNote::WalletLegacyTransfer> transfers;
   for (auto it = req.destinations.begin(); it != req.destinations.end(); it++) {
     CryptoNote::WalletLegacyTransfer transfer;
@@ -149,7 +185,7 @@ bool wallet_rpc_server::on_transfer(const wallet_rpc::COMMAND_RPC_TRANSFER::requ
 
     Crypto::Hash payment_id;
     if (!CryptoNote::parsePaymentId(payment_id_str, payment_id)) {
-      throw JsonRpc::JsonRpcError(WALLET_RPC_ERROR_CODE_WRONG_PAYMENT_ID, 
+      throw JsonRpc::JsonRpcError(WALLET_RPC_ERROR_CODE_WRONG_PAYMENT_ID,
         "Payment id has invalid format: \"" + payment_id_str + "\", expected 64-character string");
     }
 
@@ -290,6 +326,52 @@ bool wallet_rpc_server::on_get_height(const wallet_rpc::COMMAND_RPC_GET_HEIGHT::
 bool wallet_rpc_server::on_reset(const wallet_rpc::COMMAND_RPC_RESET::request& req, wallet_rpc::COMMAND_RPC_RESET::response& res) {
   m_wallet.reset();
   return true;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------
+bool wallet_rpc_server::on_stop_wallet(const wallet_rpc::COMMAND_RPC_STOP::request& req, wallet_rpc::COMMAND_RPC_STOP::response& res) {
+  
+  if(m_allow_extended_rpc) {
+    try {
+      WalletHelper::storeWallet(m_wallet, m_walletFilename);
+    } catch (std::exception& e) {
+      throw JsonRpc::JsonRpcError(WALLET_RPC_ERROR_CODE_UNKNOWN_ERROR, std::string("Couldn't save wallet: ") + e.what());
+    }
+
+    wallet_rpc_server::send_stop_signal();
+  }
+  else {
+    throw JsonRpc::JsonRpcError(WALLET_RPC_ERROR_METHOD_RESTRICTED, "Unable to invoke extended RPC method without explicit --allow-extended-rpc flag.");
+  }
+  return true;
+  
+}
+
+bool wallet_rpc_server::on_get_address(const wallet_rpc::COMMAND_RPC_GET_ADDRESS::request& req, wallet_rpc::COMMAND_RPC_GET_ADDRESS::response& res) {
+  
+  if(m_allow_extended_rpc) {
+    res.address = m_wallet.getAddress();
+  }
+  else {
+    throw JsonRpc::JsonRpcError(WALLET_RPC_ERROR_METHOD_RESTRICTED, "Unable to invoke extended RPC method without explicit --allow-extended-rpc flag.");
+  }
+  return true;
+
+}
+
+bool wallet_rpc_server::on_view_keys(const wallet_rpc::COMMAND_RPC_VIEW_KEYS::request& req, wallet_rpc::COMMAND_RPC_VIEW_KEYS::response& res) {
+  
+  if(m_allow_extended_rpc) {
+    AccountKeys keys;
+    m_wallet.getAccountKeys(keys);
+    res.view_key = Common::podToHex(keys.viewSecretKey);
+    res.spend_key = Common::podToHex(keys.spendSecretKey);
+  }
+  else {
+    throw JsonRpc::JsonRpcError(WALLET_RPC_ERROR_METHOD_RESTRICTED, "Unable to invoke extended RPC method without explicit --allow-extended-rpc flag.");
+  }
+  return true;
+
 }
 
 }

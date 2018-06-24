@@ -254,7 +254,7 @@ bool Currency::constructMinerTx(uint8_t blockMajorVersion, uint32_t height, size
   return true;
 }
 
-bool Currency::isFusionTransaction(const std::vector<uint64_t>& inputsAmounts, const std::vector<uint64_t>& outputsAmounts, size_t size) const {
+    bool Currency::isFusionTransaction(const std::vector<uint64_t>& inputsAmounts, const std::vector<uint64_t>& outputsAmounts, size_t size, uint32_t height) const {
   if (size > fusionTxMaxSize()) {
     return false;
   }
@@ -269,7 +269,7 @@ bool Currency::isFusionTransaction(const std::vector<uint64_t>& inputsAmounts, c
 
   uint64_t inputAmount = 0;
   for (auto amount: inputsAmounts) {
-    if (amount < defaultDustThreshold()) {
+    if (amount < defaultDustThreshold(height)) {
       return false;
     }
 
@@ -284,7 +284,7 @@ bool Currency::isFusionTransaction(const std::vector<uint64_t>& inputsAmounts, c
   return expectedOutputsAmounts == outputsAmounts;
 }
 
-bool Currency::isFusionTransaction(const Transaction& transaction, size_t size) const {
+bool Currency::isFusionTransaction(const Transaction& transaction, size_t size, uint32_t height) const {
   assert(getObjectBinarySize(transaction) == size);
 
   std::vector<uint64_t> outputsAmounts;
@@ -293,31 +293,31 @@ bool Currency::isFusionTransaction(const Transaction& transaction, size_t size) 
     outputsAmounts.push_back(output.amount);
   }
 
-  return isFusionTransaction(getInputsAmounts(transaction), outputsAmounts, size);
+  return isFusionTransaction(getInputsAmounts(transaction), outputsAmounts, size, height);
 }
 
-bool Currency::isFusionTransaction(const Transaction& transaction) const {
-  return isFusionTransaction(transaction, getObjectBinarySize(transaction));
+bool Currency::isFusionTransaction(const Transaction& transaction, uint32_t height) const {
+        return isFusionTransaction(transaction, getObjectBinarySize(transaction), height);
 }
 
-bool Currency::isAmountApplicableInFusionTransactionInput(uint64_t amount, uint64_t threshold) const {
+bool Currency::isAmountApplicableInFusionTransactionInput(uint64_t amount, uint64_t threshold, uint32_t height) const {
   uint8_t ignore;
-  return isAmountApplicableInFusionTransactionInput(amount, threshold, ignore);
+  return isAmountApplicableInFusionTransactionInput(amount, threshold, ignore, height);
 }
 
-bool Currency::isAmountApplicableInFusionTransactionInput(uint64_t amount, uint64_t threshold, uint8_t& amountPowerOfTen) const {
+bool Currency::isAmountApplicableInFusionTransactionInput(uint64_t amount, uint64_t threshold, uint8_t& amountPowerOfTen, uint32_t height) const {
   if (amount >= threshold) {
     return false;
   }
 
-  if (amount < defaultDustThreshold()) {
+  if (amount < defaultDustThreshold(height)) {
     return false;
   }
 
   auto it = std::lower_bound(PRETTY_AMOUNTS.begin(), PRETTY_AMOUNTS.end(), amount);
   if (it == PRETTY_AMOUNTS.end() || amount != *it) {
     return false;
-  } 
+  }
 
   amountPowerOfTen = static_cast<uint8_t>(std::distance(PRETTY_AMOUNTS.begin(), it) / 9);
   return true;

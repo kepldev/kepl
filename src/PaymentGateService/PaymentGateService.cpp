@@ -1,19 +1,19 @@
-// Copyright (c) 2012-2017, The CryptoNote developers, The KEPL developers
+// Copyright (c) 2012-2017, The CryptoNote developers, The Bytecoin developers
 //
-// This file is part of KEPL.
+// This file is part of Bytecoin.
 //
-// KEPL is free software: you can redistribute it and/or modify
+// Bytecoin is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// KEPL is distributed in the hope that it will be useful,
+// Bytecoin is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with KEPL.  If not, see <http://www.gnu.org/licenses/>.
+// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "PaymentGateService.h"
 
@@ -34,6 +34,9 @@
 #include "CryptoNoteCore/RocksDBWrapper.h"
 #include "CryptoNoteProtocol/CryptoNoteProtocolHandler.h"
 #include "P2p/NetNode.h"
+#include "Rpc/RpcServer.h"
+#include "Rpc/RpcServerConfig.h"
+#include "NodeRpcProxy/NodeRpcProxy.h"
 #include <System/Context.h>
 #include "Wallet/WalletGreen.h"
 
@@ -108,7 +111,11 @@ bool PaymentGateService::init(int argc, char** argv) {
 WalletConfiguration PaymentGateService::getWalletConfig() const {
   return WalletConfiguration{
     config.gateConfiguration.containerFile,
-    config.gateConfiguration.containerPassword
+    config.gateConfiguration.containerPassword,
+    config.gateConfiguration.syncFromZero,
+    config.gateConfiguration.secretViewKey,
+    config.gateConfiguration.secretSpendKey,
+    config.gateConfiguration.mnemonicSeed
   };
 }
 
@@ -185,7 +192,7 @@ void PaymentGateService::runInProcess(Logging::LoggerRef& log) {
     dbShutdownOnExit.cancel();
     database.shutdown();
 
-    database.destoy(dbConfig);
+    database.destroy(dbConfig);
 
     database.init(dbConfig);
     dbShutdownOnExit.resume();
@@ -207,7 +214,9 @@ void PaymentGateService::runInProcess(Logging::LoggerRef& log) {
 
   CryptoNote::CryptoNoteProtocolHandler protocol(currency, *dispatcher, core, nullptr, logger);
   CryptoNote::NodeServer p2pNode(*dispatcher, protocol, logger);
-
+  CryptoNote::RpcServerConfig rpcConfig;
+  CryptoNote::RpcServer rpcServer(*dispatcher, logger, core, p2pNode, protocol);
+  
   protocol.set_p2p_endpoint(&p2pNode);
 
   log(Logging::INFO) << "initializing p2pNode";
@@ -215,8 +224,11 @@ void PaymentGateService::runInProcess(Logging::LoggerRef& log) {
     throw std::runtime_error("Failed to init p2pNode");
   }
 
-  std::unique_ptr<CryptoNote::INode> node(new CryptoNote::InProcessNode(core, protocol, *dispatcher));
-
+  log(Logging::INFO) << "Starting node RPC Server address " << rpcConfig.getBindAddress() << " ...";
+  rpcServer.start(rpcConfig.bindIp, rpcConfig.bindPort);
+  
+  log(Logging::INFO) << "Starting local NodeRPCProxy...";
+  std::unique_ptr<CryptoNote::INode> node(new CryptoNote::NodeRpcProxy(rpcConfig.bindIp, rpcConfig.bindPort, logger));
   std::error_code nodeInitStatus;
   node->init([&log, &nodeInitStatus](std::error_code ec) {
     nodeInitStatus = ec;
@@ -228,6 +240,7 @@ void PaymentGateService::runInProcess(Logging::LoggerRef& log) {
   } else {
     log(Logging::INFO) << "node is inited successfully";
   }
+  log(Logging::INFO) << "Local NodeRPCProxy Started...";
 
   log(Logging::INFO) << "Spawning p2p server";
 
@@ -239,13 +252,16 @@ void PaymentGateService::runInProcess(Logging::LoggerRef& log) {
   });
 
   p2pStarted.wait();
-
+  
   runWalletService(currency, *node);
 
+  log(Logging::INFO) << "Stopping node RPC Server...";
+  rpcServer.stop();
   p2pNode.sendStopSignal();
   context.get();
   node->shutdown();
   p2pNode.deinit(); 
+  core.save();
 }
 
 void PaymentGateService::runRpcProxy(Logging::LoggerRef& log) {
@@ -264,7 +280,8 @@ void PaymentGateService::runRpcProxy(Logging::LoggerRef& log) {
 void PaymentGateService::runWalletService(const CryptoNote::Currency& currency, CryptoNote::INode& node) {
   PaymentService::WalletConfiguration walletConfiguration{
     config.gateConfiguration.containerFile,
-    config.gateConfiguration.containerPassword
+    config.gateConfiguration.containerPassword,
+    config.gateConfiguration.syncFromZero
   };
 
   std::unique_ptr<CryptoNote::WalletGreen> wallet(new CryptoNote::WalletGreen(*dispatcher, currency, node, logger));
@@ -286,7 +303,7 @@ void PaymentGateService::runWalletService(const CryptoNote::Currency& currency, 
       std::cout << "Address: " << address << std::endl;
     }
   } else {
-    PaymentService::PaymentServiceJsonRpcServer rpcServer(*dispatcher, *stopEvent, *service, logger);
+    PaymentService::PaymentServiceJsonRpcServer rpcServer(*dispatcher, *stopEvent, *service, logger, config.gateConfiguration);
     rpcServer.start(config.gateConfiguration.bindAddress, config.gateConfiguration.bindPort);
 
     Logging::LoggerRef(logger, "PaymentGateService")(Logging::INFO, Logging::BRIGHT_WHITE) << "JSON-RPC server stopped, stopping wallet service...";

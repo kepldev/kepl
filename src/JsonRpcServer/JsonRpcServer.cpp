@@ -1,19 +1,19 @@
-// Copyright (c) 2012-2017, The CryptoNote developers, The KEPL developers
+// Copyright (c) 2012-2017, The CryptoNote developers, The Bytecoin developers
 //
-// This file is part of KEPL.
+// This file is part of Bytecoin.
 //
-// KEPL is free software: you can redistribute it and/or modify
+// Bytecoin is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// KEPL is distributed in the hope that it will be useful,
+// Bytecoin is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with KEPL.  If not, see <http://www.gnu.org/licenses/>.
+// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "JsonRpcServer.h"
 
@@ -30,6 +30,7 @@
 #include <System/Ipv4Address.h>
 #include "HTTP/HttpParser.h"
 #include "HTTP/HttpResponse.h"
+#include "Rpc/JsonRpc.h"
 
 #include "Common/JsonValue.h"
 #include "Serialization/JsonInputValueSerializer.h"
@@ -37,11 +38,12 @@
 
 namespace CryptoNote {
 
-JsonRpcServer::JsonRpcServer(System::Dispatcher& sys, System::Event& stopEvent, Logging::ILogger& loggerGroup) :
+JsonRpcServer::JsonRpcServer(System::Dispatcher& sys, System::Event& stopEvent, Logging::ILogger& loggerGroup, PaymentService::Configuration& config) :
   HttpServer(sys, loggerGroup), 
   system(sys),
   stopEvent(stopEvent),
-  logger(loggerGroup, "JsonRpcServer")
+  logger(loggerGroup, "JsonRpcServer"),
+  config(config)
 {
 }
 
@@ -105,7 +107,7 @@ void JsonRpcServer::makeErrorResponse(const std::error_code& ec, Common::JsonVal
   JsonValue error(JsonValue::OBJECT);
 
   JsonValue code;
-  code = static_cast<int64_t>(-32000); //Application specific error code
+  code = static_cast<int64_t>(CryptoNote::JsonRpc::errParseError); //Application specific error code
 
   JsonValue message;
   message = ec.message();
@@ -153,10 +155,27 @@ void JsonRpcServer::makeMethodNotFoundResponse(Common::JsonValue& resp) {
   JsonValue error(JsonValue::OBJECT);
 
   JsonValue code;
-  code = static_cast<int64_t>(-32601); //ambigous declaration of JsonValue::operator= (between int and JsonValue)
+  code = static_cast<int64_t>(CryptoNote::JsonRpc::errMethodNotFound); //ambigous declaration of JsonValue::operator= (between int and JsonValue)
 
   JsonValue message;
   message = "Method not found";
+
+  error.insert("code", code);
+  error.insert("message", message);
+
+  resp.insert("error", error);
+}
+
+void JsonRpcServer::makeInvalidPasswordResponse(Common::JsonValue& resp) {
+  using Common::JsonValue;
+
+  JsonValue error(JsonValue::OBJECT);
+
+  JsonValue code;
+  code = static_cast<int64_t>(CryptoNote::JsonRpc::errInvalidPassword);
+
+  JsonValue message;
+  message = "Invalid or no rpc password";
 
   error.insert("code", code);
   error.insert("message", message);
@@ -177,7 +196,7 @@ void JsonRpcServer::makeJsonParsingErrorResponse(Common::JsonValue& resp) {
 
   JsonValue error(JsonValue::OBJECT);
   JsonValue code;
-  code = static_cast<int64_t>(-32700); //ambigous declaration of JsonValue::operator= (between int and JsonValue)
+  code = static_cast<int64_t>(CryptoNote::JsonRpc::errParseError); //ambigous declaration of JsonValue::operator= (between int and JsonValue)
 
   JsonValue message = "Parse error";
 

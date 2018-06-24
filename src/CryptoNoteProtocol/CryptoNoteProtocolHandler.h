@@ -1,19 +1,19 @@
-// Copyright (c) 2012-2017, The CryptoNote developers, The KEPL developers
+// Copyright (c) 2012-2017, The CryptoNote developers, The Bytecoin developers
 //
-// This file is part of KEPL.
+// This file is part of Bytecoin.
 //
-// KEPL is free software: you can redistribute it and/or modify
+// Bytecoin is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// KEPL is distributed in the hope that it will be useful,
+// Bytecoin is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with KEPL.  If not, see <http://www.gnu.org/licenses/>.
+// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
@@ -67,6 +67,7 @@ namespace CryptoNote
     int handleCommand(bool is_notify, int command, const BinaryArray& in_buff, BinaryArray& buff_out, CryptoNoteConnectionContext& context, bool& handled);
     virtual size_t getPeerCount() const override;
     virtual uint32_t getObservedHeight() const override;
+    virtual uint32_t getBlockchainHeight() const override;
     void requestMissingPoolTransactions(const CryptoNoteConnectionContext& context);
 
   private:
@@ -105,6 +106,9 @@ namespace CryptoNote
 
     mutable std::mutex m_observedHeightMutex;
     uint32_t m_observedHeight;
+    
+    mutable std::mutex m_blockchainHeightMutex;
+    uint32_t m_blockchainHeight;
 
     std::atomic<size_t> m_peersCount;
     Tools::ObserverManager<ICryptoNoteProtocolObserver> m_observerManager;

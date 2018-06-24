@@ -1,19 +1,19 @@
-// Copyright (c) 2012-2017, The CryptoNote developers, The KEPL developers
+// Copyright (c) 2012-2017, The CryptoNote developers, The Bytecoin developers
 //
-// This file is part of KEPL.
+// This file is part of Bytecoin.
 //
-// KEPL is free software: you can redistribute it and/or modify
+// Bytecoin is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// KEPL is distributed in the hope that it will be useful,
+// Bytecoin is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with KEPL.  If not, see <http://www.gnu.org/licenses/>.
+// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "PaymentServiceConfiguration.h"
 
@@ -36,18 +36,29 @@ Configuration::Configuration() {
   logFile = "walletd.log";
   testnet = false;
   printAddresses = false;
+  syncFromZero = false;
   logLevel = Logging::INFO;
   bindAddress = "";
   bindPort = 0;
+  secretViewKey = "";
+  secretSpendKey = "";
+  mnemonicSeed = "";
+  rpcPassword = "";
+  legacySecurity = false;
 }
 
 void Configuration::initOptions(boost::program_options::options_description& desc) {
   desc.add_options()
-      ("bind-address", po::value<std::string>()->default_value("0.0.0.0"), "payment service bind address")
-      ("bind-port", po::value<uint16_t>()->default_value(8770), "payment service bind port")
+      ("bind-address", po::value<std::string>()->default_value("127.0.0.1"), "payment service bind address")
+      ("bind-port", po::value<uint16_t>()->default_value(8070), "payment service bind port")
+      ("rpc-password", po::value<std::string>(), "Specify the password to access the rpc server.")
+      ("rpc-legacy-security", "Enable legacy mode (no password for RPC). WARNING: INSECURE. USE ONLY AS A LAST RESORT.")
       ("container-file,w", po::value<std::string>(), "container file")
       ("container-password,p", po::value<std::string>(), "container password")
       ("generate-container,g", "generate new container file with one wallet and exit")
+	    ("view-key", po::value<std::string>(), "generate a container with this secret key view")
+	    ("spend-key", po::value<std::string>(), "generate a container with this secret spend key")
+      ("mnemonic-seed", po::value<std::string>(), "generate a container with this mnemonic seed")
       ("daemon,d", "run as daemon in Unix or as service in Windows")
 #ifdef _WIN32
       ("register-service", "register service and exit (Windows only)")
@@ -56,6 +67,7 @@ void Configuration::initOptions(boost::program_options::options_description& des
       ("log-file,l", po::value<std::string>(), "log file")
       ("server-root", po::value<std::string>(), "server root. The service will use it as working directory. Don't set it if don't want to change it")
       ("log-level", po::value<size_t>(), "log level")
+      ("SYNC_FROM_ZERO", "sync from timestamp 0")
       ("address", "print wallet addresses and exit");
 }
 
@@ -116,15 +128,67 @@ void Configuration::init(const boost::program_options::variables_map& options) {
     generateNewContainer = true;
   }
 
+  if (options.count("view-key") != 0)
+  {
+    if (!generateNewContainer)
+    {
+      throw ConfigurationError("generate-container parameter is required");
+    }
+    secretViewKey = options["view-key"].as<std::string>();
+  }
+
+  if (options.count("spend-key") != 0)
+  {
+    if (!generateNewContainer)
+    {
+      throw ConfigurationError("generate-container parameter is required");
+    }
+    secretSpendKey = options["spend-key"].as<std::string>();
+  }
+
+  if (options.count("mnemonic-seed") != 0)
+  {
+    if (!generateNewContainer)
+    {
+      throw ConfigurationError("generate-container parameter is required");
+    }
+    else if (options.count("spend-key") != 0 || options.count("view-key") != 0)
+    {
+      throw ConfigurationError("Cannot specify import via both mnemonic seed and private keys");
+    }
+    mnemonicSeed = options["mnemonic-seed"].as<std::string>();
+  }
+
   if (options.count("address") != 0) {
     printAddresses = true;
   }
 
+  if (options.count("SYNC_FROM_ZERO") != 0) {
+    syncFromZero = true;
+  }
   if (!registerService && !unregisterService) {
     if (containerFile.empty()) {
       throw ConfigurationError("container-file parameter are required");
     }
   }
+  
+  // If generating a container skip the authentication parameters.
+  if (generateNewContainer) {
+    return;
+  }
+  
+  // Check for the authentication parameters
+  if ((options.count("rpc-password") == 0) && (options.count("rpc-legacy-security") == 0)) {
+    throw ConfigurationError("Please specify an RPC password or use the --rpc-legacy-security flag.");
+  }
+  
+  if (options.count("rpc-legacy-security") != 0) {
+    legacySecurity = true;
+  }
+  else {
+    rpcPassword = options["rpc-password"].as<std::string>();
+  }
+  
 }
 
 } //namespace PaymentService

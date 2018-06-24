@@ -1,19 +1,7 @@
 // Copyright (c) 2012-2017, The CryptoNote developers, The Bytecoin developers
-//
-// This file is part of Bytecoin.
-//
-// Bytecoin is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// Bytecoin is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
+// Copyright (c) 2018, The TurtleCoin Developers
+// 
+// Please see the included LICENSE file for more information.
 
 #pragma once
 
@@ -50,10 +38,12 @@ struct COMMAND_RPC_GET_HEIGHT {
 
   struct response {
     uint64_t height;
+    uint32_t network_height;
     std::string status;
 
     void serialize(ISerializer &s) {
       KV_MEMBER(height)
+      KV_MEMBER(network_height)
       KV_MEMBER(status)
     }
   };
@@ -275,6 +265,16 @@ struct COMMAND_RPC_GET_INFO {
     uint64_t white_peerlist_size;
     uint64_t grey_peerlist_size;
     uint32_t last_known_block_index;
+    uint32_t network_height;
+    std::vector<uint64_t> upgrade_heights;
+    uint64_t supported_height;
+    uint32_t hashrate;
+    uint8_t major_version;
+    uint8_t minor_version;
+    std::string version;
+    uint64_t start_time;
+    bool synced;
+    bool testnet;
 
     void serialize(ISerializer &s) {
       KV_MEMBER(status)
@@ -288,6 +288,16 @@ struct COMMAND_RPC_GET_INFO {
       KV_MEMBER(white_peerlist_size)
       KV_MEMBER(grey_peerlist_size)
       KV_MEMBER(last_known_block_index)
+      KV_MEMBER(network_height)
+      KV_MEMBER(upgrade_heights)
+      KV_MEMBER(supported_height)
+      KV_MEMBER(hashrate)
+      KV_MEMBER(major_version)
+      KV_MEMBER(minor_version)
+      KV_MEMBER(start_time)
+      KV_MEMBER(synced)
+      KV_MEMBER(testnet)
+      KV_MEMBER(version)
     }
   };
 };
@@ -381,6 +391,8 @@ struct block_header_response {
   std::string hash;
   Difficulty difficulty;
   uint64_t reward;
+  uint32_t num_txes;
+  uint64_t block_size;
 
   void serialize(ISerializer &s) {
     KV_MEMBER(major_version)
@@ -394,6 +406,8 @@ struct block_header_response {
     KV_MEMBER(hash)
     KV_MEMBER(difficulty)
     KV_MEMBER(reward)
+	KV_MEMBER(num_txes)
+	KV_MEMBER(block_size)
   }
 };
 
@@ -408,19 +422,53 @@ struct BLOCK_HEADER_RESPONSE {
 };
 
 
+struct COMMAND_RPC_GET_BLOCK_HEADERS_RANGE
+{
+	struct request
+	{
+		uint64_t start_height;
+		uint64_t end_height;
+
+		void serialize(ISerializer &s) {
+			KV_MEMBER(start_height)
+			KV_MEMBER(end_height)
+		}
+		/*BEGIN_KV_SERIALIZE_MAP()
+		KV_SERIALIZE(start_height)
+		KV_SERIALIZE(end_height)
+		END_KV_SERIALIZE_MAP()*/
+	};
+
+	struct response
+	{
+		std::string status;
+		std::vector<block_header_response> headers;
+		bool untrusted;
+
+		void serialize(ISerializer &s) {
+			KV_MEMBER(status)
+			KV_MEMBER(headers)
+			KV_MEMBER(untrusted)
+		}
+		/*BEGIN_KV_SERIALIZE_MAP()
+		KV_SERIALIZE(status)
+		KV_SERIALIZE(headers)
+		KV_SERIALIZE(untrusted)
+		END_KV_SERIALIZE_MAP()*/
+	};
+};
+
 struct f_transaction_short_response {
   std::string hash;
   uint64_t fee;
   uint64_t amount_out;
   uint64_t size;
-  uint8_t version;
 
   void serialize(ISerializer &s) {
     KV_MEMBER(hash)
     KV_MEMBER(fee)
     KV_MEMBER(amount_out)
     KV_MEMBER(size)
-    KV_MEMBER(version)
   }
 };
 
@@ -443,20 +491,20 @@ struct f_transaction_details_response {
 };
 
 struct f_block_short_response {
+  uint64_t difficulty;
   uint64_t timestamp;
   uint32_t height;
   std::string hash;
   uint64_t tx_count;
   uint64_t cumul_size;
-  uint64_t difficulty;
 
   void serialize(ISerializer &s) {
+    KV_MEMBER(difficulty)
     KV_MEMBER(timestamp)
     KV_MEMBER(height)
     KV_MEMBER(hash)
     KV_MEMBER(cumul_size)
     KV_MEMBER(tx_count)
-    KV_MEMBER(difficulty)
   }
 };
 
@@ -669,6 +717,26 @@ struct COMMAND_RPC_QUERY_BLOCKS_LITE {
   };
 };
 
+struct COMMAND_RPC_GET_BLOCKS_DETAILS_BY_HEIGHTS {
+  struct request {
+    std::vector<uint32_t> blockHeights;
+
+    void serialize(ISerializer& s) {
+      serializeAsBinary(blockHeights, "blockHeights", s);
+    }
+  };
+
+  struct response {
+    std::vector<BlockDetails> blocks;
+    std::string status;
+
+    void serialize(ISerializer& s) {
+      KV_MEMBER(status)
+      KV_MEMBER(blocks)
+    }
+  };
+};
+
 struct COMMAND_RPC_GET_BLOCKS_DETAILS_BY_HASHES {
   struct request {
     std::vector<Crypto::Hash> blockHashes;
@@ -685,6 +753,26 @@ struct COMMAND_RPC_GET_BLOCKS_DETAILS_BY_HASHES {
     void serialize(ISerializer& s) {
       KV_MEMBER(status)
       KV_MEMBER(blocks)
+    }
+  };
+};
+
+struct COMMAND_RPC_GET_BLOCK_DETAILS_BY_HEIGHT {
+  struct request {
+    uint32_t blockHeight;
+
+    void serialize(ISerializer& s) {
+      KV_MEMBER(blockHeight)
+    }
+  };
+
+  struct response {
+    BlockDetails block;
+    std::string status;
+
+    void serialize(ISerializer& s) {
+      KV_MEMBER(status)
+      KV_MEMBER(block)
     }
   };
 };
@@ -747,6 +835,21 @@ struct COMMAND_RPC_GET_TRANSACTION_DETAILS_BY_HASHES {
     void serialize(ISerializer &s) {
       KV_MEMBER(status)
       KV_MEMBER(transactions)
+    }
+  };
+};
+
+struct COMMAND_RPC_GET_PEERS {
+  //TODO useful to add option to get gray peers ?
+  typedef EMPTY_STRUCT request;
+
+  struct response {
+    std::string status;
+    std::vector<std::string> peers;
+
+    void serialize(ISerializer &s) {
+      KV_MEMBER(status)
+      KV_MEMBER(peers)
     }
   };
 };
