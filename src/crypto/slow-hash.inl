@@ -94,7 +94,7 @@ cn_slow_hash_noaesni
   a[0] = ctx->a[0];
   a[1] = ctx->a[1];
 
-  for(i = 0; likely(i < 0x80000); i++)
+  for(i = 0; i < ITER(); i++)
   {
     __m128i c_x = _mm_load_si128((__m128i *)&ctx->long_state[a[0] & 0x1FFFF0]);
     __m128i a_x = _mm_load_si128((__m128i *)a);

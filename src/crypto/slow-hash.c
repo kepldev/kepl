@@ -55,11 +55,11 @@ void cn_slow_hash_f(void * a, const void * b, size_t c, void * d, int variant){
 #endif
 
 #define MEMORY         (1 << 21) /* 2 MiB */
-#define ITER           (1 << 20)
+#define ITER()         (variant >= 2 ? (1 << 19) : (1 << 20))
 #define AES_BLOCK_SIZE  16
 #define AES_KEY_SIZE    32 /*16*/
 #define INIT_SIZE_BLK   8
-#define INIT_SIZE_BYTE (INIT_SIZE_BLK * AES_BLOCK_SIZE)	// 128
+#define INIT_SIZE_BYTE (INIT_SIZE_BLK * AES_BLOCK_SIZE) // 128
 
 #pragma pack(push, 1)
 union cn_slow_hash_state {

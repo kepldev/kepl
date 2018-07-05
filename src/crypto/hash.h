@@ -57,6 +57,7 @@ namespace Crypto {
     void *data;
     friend inline void cn_slow_hash(cn_context &, const void *, size_t, Hash &);
     friend inline void cn_slow_hash_v7(cn_context &, const void *, size_t, Hash &);
+    friend inline void cn_slow_hash_mas(cn_context &, const void *, size_t, Hash &);
   };
 
   inline void cn_slow_hash(cn_context &context, const void *data, size_t length, Hash &hash) {
@@ -69,6 +70,10 @@ namespace Crypto {
 
   inline void cn_slow_hash_v7(cn_context &context, const void *data, size_t length, Hash &hash) {
     (*cn_slow_hash_f)(context.data, data, length, reinterpret_cast<void *>(&hash), 1);
+  }
+
+  inline void cn_slow_hash_mas(cn_context &context, const void *data, size_t length, Hash &hash) {
+    (*cn_slow_hash_f)(context.data, data, length, reinterpret_cast<void *>(&hash), 2);
   }
 
   inline void tree_branch(const Hash *hashes, size_t count, Hash *branch) {

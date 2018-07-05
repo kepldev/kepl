@@ -30,6 +30,7 @@
 
 #include "BlockchainStorage.h"
 #include "Common/StringView.h"
+#include "CryptoNoteCore/UpgradeManager.h"
 #include "Currency.h"
 #include "Difficulty.h"
 #include "IBlockchainCache.h"
@@ -306,6 +307,8 @@ private:
   TransactionValidatorState fillOutputsSpentByBlock(uint32_t blockIndex) const;
 
   void fixChildrenParent(IBlockchainCache* p);
+
+  uint8_t getBlockMajorVersionForHeight(uint32_t height) const;
 
   void doPushBlock(const CachedBlock& cachedBlock,
     const std::vector<CachedTransaction>& cachedTransactions,
