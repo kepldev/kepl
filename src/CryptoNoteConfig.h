@@ -45,6 +45,8 @@ const uint64_t DIFFICULTY_WINDOW_V5                          = 60;
 const uint64_t DIFFICULTY_BLOCKS_COUNT_V5                    = DIFFICULTY_WINDOW_V5 + 1;
 
 const unsigned EMISSION_SPEED_FACTOR                         = 18;
+const unsigned EMISSION_SPEED_FACTOR_V5                      = 19;
+const unsigned EMISSION_SMOOTHING_FACTOR_V5                  = 21;
 static_assert(EMISSION_SPEED_FACTOR <= 8 * sizeof(uint64_t), "Bad EMISSION_SPEED_FACTOR");
 
 const size_t   CRYPTONOTE_REWARD_BLOCKS_WINDOW               = 100;
