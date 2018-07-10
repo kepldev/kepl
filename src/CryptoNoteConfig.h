@@ -102,14 +102,13 @@ const uint64_t DEFAULT_MIXIN                                 =  1;
 /* The index in the FORK_HEIGHTS array that this version of the software will
    support. For example, if CURRENT_FORK_INDEX is 3, this version of the
    software will support the fork at 600,000 blocks. */
-const uint8_t CURRENT_FORK_INDEX = 3;
+const uint8_t CURRENT_FORK_INDEX = 1;
 
 /* Block heights we are going to have hard forks at */
 const uint64_t FORK_HEIGHTS[] = {
     17000,
-    100000,
+    50505,
     300000,
-    999999,
 };
 
 /* Make sure CURRENT_FORK_INDEX is a valid index */
