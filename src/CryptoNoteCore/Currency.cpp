@@ -492,7 +492,7 @@ Difficulty Currency::nextDifficultyV5(uint64_t blockIndex, std::vector<std::uint
     int64_t fork_v5_threshold = m_upgradeHeightV5 + CryptoNote::parameters::DIFFICULTY_WINDOW_V5;
     if (timestamps.size() <= static_cast<uint64_t>(N) || blockIndex <= fork_v5_threshold)
     {
-        return 1000;
+        return 20000;
     }
 
     for (int64_t i = 1; i <= N; i++)
