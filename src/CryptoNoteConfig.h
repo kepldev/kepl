@@ -45,6 +45,8 @@ const uint64_t DIFFICULTY_WINDOW_V5                          = 60;
 const uint64_t DIFFICULTY_BLOCKS_COUNT_V5                    = DIFFICULTY_WINDOW_V5 + 1;
 
 const unsigned EMISSION_SPEED_FACTOR                         = 18;
+const unsigned EMISSION_SPEED_FACTOR_V5                      = 19;
+const unsigned EMISSION_SMOOTHING_FACTOR_V5                  = 21;
 static_assert(EMISSION_SPEED_FACTOR <= 8 * sizeof(uint64_t), "Bad EMISSION_SPEED_FACTOR");
 
 const size_t   CRYPTONOTE_REWARD_BLOCKS_WINDOW               = 100;
@@ -82,7 +84,7 @@ const uint32_t KEY_IMAGE_CHECKING_BLOCK_INDEX                = 0;
 const uint32_t UPGRADE_HEIGHT_V2                             = 1;
 const uint32_t UPGRADE_HEIGHT_V3                             = 2;
 const uint32_t UPGRADE_HEIGHT_V4                             = 17000;
-const uint32_t UPGRADE_HEIGHT_V5                             = 50503;
+const uint32_t UPGRADE_HEIGHT_V5                             = 50509;
 const unsigned UPGRADE_VOTING_THRESHOLD                      = 90;               // percent
 const uint32_t UPGRADE_VOTING_WINDOW                         = EXPECTED_NUMBER_OF_BLOCKS_PER_DAY;  // blocks
 const uint32_t UPGRADE_WINDOW                                = EXPECTED_NUMBER_OF_BLOCKS_PER_DAY;  // blocks
@@ -100,14 +102,13 @@ const uint64_t DEFAULT_MIXIN                                 =  1;
 /* The index in the FORK_HEIGHTS array that this version of the software will
    support. For example, if CURRENT_FORK_INDEX is 3, this version of the
    software will support the fork at 600,000 blocks. */
-const uint8_t CURRENT_FORK_INDEX = 3;
+const uint8_t CURRENT_FORK_INDEX = 1;
 
 /* Block heights we are going to have hard forks at */
 const uint64_t FORK_HEIGHTS[] = {
     17000,
-    100000,
+    50505,
     300000,
-    999999,
 };
 
 /* Make sure CURRENT_FORK_INDEX is a valid index */
@@ -166,7 +167,9 @@ struct CheckpointData {
 const CheckpointData CHECKPOINTS[] = {
   {0, "52b9fcacc5d9c66405dfe7c2a2947d624574f294f48f8869900097ab2d0c8937"},
   {5455, "a5799a8494d35735bc9bf09eec662f7e2f33912fe66e1da4d9f98d646b90927d"},
-  {17001, "2fe2962dfef23c74b5dfc4380f3d76a3fbe62030c1d0e60ece6b090ab5020c11"}
+  {17001, "2fe2962dfef23c74b5dfc4380f3d76a3fbe62030c1d0e60ece6b090ab5020c11"},
+  {30000, "e2ba73948df5aeb02e7978c0fde87b94c2da246e3e33326dda612d368863c0e5"},
+  {50509, "c5c5abd7545f589b1122c44a1d0c7b40418da6aff4137646dfcdd24e6452623e"}
 };
 } // CryptoNote
 

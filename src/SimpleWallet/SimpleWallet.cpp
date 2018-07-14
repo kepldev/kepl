@@ -1158,6 +1158,7 @@ int main(int argc, char* argv[]) {
     std::string wallet_password = command_line::get_arg(vm, arg_password);
     std::string daemon_address = command_line::get_arg(vm, arg_daemon_address);
     std::string daemon_host = command_line::get_arg(vm, arg_daemon_host);
+
     uint16_t daemon_port = command_line::get_arg(vm, arg_daemon_port);
     if (daemon_host.empty())
       daemon_host = "localhost";
@@ -1211,7 +1212,7 @@ int main(int argc, char* argv[]) {
     logger(INFO) << "Starting wallet rpc server";
     wrpc.run();
     logger(INFO) << "Stopped wallet rpc server";
-    
+
     try {
       logger(INFO) << "Storing wallet...";
       CryptoNote::WalletHelper::storeWallet(*wallet, walletFileName);

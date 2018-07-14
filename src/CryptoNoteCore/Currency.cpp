@@ -167,9 +167,13 @@ uint32_t Currency::upgradeHeight(uint8_t majorVersion) const {
 bool Currency::getBlockReward(uint8_t blockMajorVersion, size_t medianSize, size_t currentBlockSize, uint64_t alreadyGeneratedCoins,
   uint64_t fee, uint64_t& reward, int64_t& emissionChange) const {
   assert(alreadyGeneratedCoins <= m_moneySupply);
-  assert(m_emissionSpeedFactor > 0 && m_emissionSpeedFactor <= 8 * sizeof(uint64_t));
 
-  uint64_t baseReward = (m_moneySupply - alreadyGeneratedCoins) >> m_emissionSpeedFactor;
+  uint64_t baseReward = (m_moneySupply - alreadyGeneratedCoins) >> getEmissionSpeedFactorByBlockMajorVersion(blockMajorVersion);
+
+  // Add smoothing component
+  if (blockMajorVersion >= BLOCK_MAJOR_VERSION_5) {
+      baseReward += (m_moneySupply - alreadyGeneratedCoins) >> getEmissionSmoothingFactorByBlockMajorVersion(blockMajorVersion);
+  }
 
   size_t blockGrantedFullRewardZone = blockGrantedFullRewardZoneByBlockVersion(blockMajorVersion);
   medianSize = std::max(medianSize, blockGrantedFullRewardZone);
@@ -488,7 +492,7 @@ Difficulty Currency::nextDifficultyV5(uint64_t blockIndex, std::vector<std::uint
     int64_t fork_v5_threshold = m_upgradeHeightV5 + CryptoNote::parameters::DIFFICULTY_WINDOW_V5;
     if (timestamps.size() <= static_cast<uint64_t>(N) || blockIndex <= fork_v5_threshold)
     {
-        return 100;
+        return 20000;
     }
 
     for (int64_t i = 1; i <= N; i++)
@@ -570,6 +574,27 @@ bool Currency::checkProofOfWork(Crypto::cn_context& context, const CachedBlock& 
   return false;
 }
 
+uint8_t Currency::getEmissionSpeedFactorByBlockMajorVersion(uint8_t blockMajorVersion) const {
+  uint8_t val = parameters::EMISSION_SPEED_FACTOR;
+  if (blockMajorVersion >= BLOCK_MAJOR_VERSION_5) {
+      val = parameters::EMISSION_SPEED_FACTOR_V5;
+  }
+
+  if (val <= 0 || val > 8 * sizeof(uint64_t)) {
+    throw std::invalid_argument("val at getEmissionSpeedFactorByBlockMajorVersion()");
+  }
+
+  return val;
+}
+
+uint8_t Currency::getEmissionSmoothingFactorByBlockMajorVersion(uint8_t blockMajorVersion) const {
+  if (blockMajorVersion >= BLOCK_MAJOR_VERSION_5) {
+    return parameters::EMISSION_SMOOTHING_FACTOR_V5;
+  } else {
+    throw std::invalid_argument("Cannot apply emission smoothing factor to block");
+  }
+}
+
 size_t Currency::getApproximateMaximumInputCount(size_t transactionSize, size_t outputCount, size_t mixinCount) const {
   const size_t KEY_IMAGE_SIZE = sizeof(Crypto::KeyImage);
   const size_t OUTPUT_KEY_SIZE = sizeof(decltype(KeyOutput::key));
@@ -602,7 +627,6 @@ m_minedMoneyUnlockWindow(currency.m_minedMoneyUnlockWindow),
 m_timestampCheckWindow(currency.m_timestampCheckWindow),
 m_blockFutureTimeLimit(currency.m_blockFutureTimeLimit),
 m_moneySupply(currency.m_moneySupply),
-m_emissionSpeedFactor(currency.m_emissionSpeedFactor),
 m_rewardBlocksWindow(currency.m_rewardBlocksWindow),
 m_blockGrantedFullRewardZone(currency.m_blockGrantedFullRewardZone),
 m_isBlockexplorer(currency.m_isBlockexplorer),
@@ -652,7 +676,6 @@ CurrencyBuilder::CurrencyBuilder(Logging::ILogger& log) : m_currency(log) {
   blockFutureTimeLimit(parameters::CRYPTONOTE_BLOCK_FUTURE_TIME_LIMIT);
 
   moneySupply(parameters::MONEY_SUPPLY);
-  emissionSpeedFactor(parameters::EMISSION_SPEED_FACTOR);
 
   rewardBlocksWindow(parameters::CRYPTONOTE_REWARD_BLOCKS_WINDOW);
   blockGrantedFullRewardZone(parameters::CRYPTONOTE_BLOCK_GRANTED_FULL_REWARD_ZONE);
@@ -706,15 +729,6 @@ Transaction CurrencyBuilder::generateGenesisTransaction() {
   m_currency.constructMinerTx(BLOCK_MAJOR_VERSION_1, 0, 0, 0, 0, 0, ac, tx); // zero fee in genesis
 
   return tx;
-}
-
-CurrencyBuilder& CurrencyBuilder::emissionSpeedFactor(unsigned int val) {
-  if (val <= 0 || val > 8 * sizeof(uint64_t)) {
-    throw std::invalid_argument("val at emissionSpeedFactor()");
-  }
-
-  m_currency.m_emissionSpeedFactor = val;
-  return *this;
 }
 
 CurrencyBuilder& CurrencyBuilder::numberOfDecimalPlaces(size_t val) {
