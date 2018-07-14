@@ -167,16 +167,13 @@ uint32_t Currency::upgradeHeight(uint8_t majorVersion) const {
 bool Currency::getBlockReward(uint8_t blockMajorVersion, size_t medianSize, size_t currentBlockSize, uint64_t alreadyGeneratedCoins,
   uint64_t fee, uint64_t& reward, int64_t& emissionChange) const {
   assert(alreadyGeneratedCoins <= m_moneySupply);
-  logger(ERROR, BRIGHT_RED) << "blockMajorVersion" << static_cast<uint64_t>(blockMajorVersion);
 
   uint64_t baseReward = (m_moneySupply - alreadyGeneratedCoins) >> getEmissionSpeedFactorByBlockMajorVersion(blockMajorVersion);
-  logger(ERROR, BRIGHT_RED) << "baseReward" << static_cast<uint64_t>(baseReward);
+
   // Add smoothing component
   if (blockMajorVersion >= BLOCK_MAJOR_VERSION_5) {
       baseReward += (m_moneySupply - alreadyGeneratedCoins) >> getEmissionSmoothingFactorByBlockMajorVersion(blockMajorVersion);
-      logger(ERROR, BRIGHT_RED) << "baseRewardWithSmoothing" << static_cast<uint64_t>(baseReward);
   }
-  logger(ERROR, BRIGHT_RED) << "finalBaseReward" << static_cast<uint64_t>(baseReward);
 
   size_t blockGrantedFullRewardZone = blockGrantedFullRewardZoneByBlockVersion(blockMajorVersion);
   medianSize = std::max(medianSize, blockGrantedFullRewardZone);
