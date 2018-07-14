@@ -84,7 +84,7 @@ const uint32_t KEY_IMAGE_CHECKING_BLOCK_INDEX                = 0;
 const uint32_t UPGRADE_HEIGHT_V2                             = 1;
 const uint32_t UPGRADE_HEIGHT_V3                             = 2;
 const uint32_t UPGRADE_HEIGHT_V4                             = 17000;
-const uint32_t UPGRADE_HEIGHT_V5                             = 50503;
+const uint32_t UPGRADE_HEIGHT_V5                             = 50509;
 const unsigned UPGRADE_VOTING_THRESHOLD                      = 90;               // percent
 const uint32_t UPGRADE_VOTING_WINDOW                         = EXPECTED_NUMBER_OF_BLOCKS_PER_DAY;  // blocks
 const uint32_t UPGRADE_WINDOW                                = EXPECTED_NUMBER_OF_BLOCKS_PER_DAY;  // blocks
@@ -167,7 +167,9 @@ struct CheckpointData {
 const CheckpointData CHECKPOINTS[] = {
   {0, "52b9fcacc5d9c66405dfe7c2a2947d624574f294f48f8869900097ab2d0c8937"},
   {5455, "a5799a8494d35735bc9bf09eec662f7e2f33912fe66e1da4d9f98d646b90927d"},
-  {17001, "2fe2962dfef23c74b5dfc4380f3d76a3fbe62030c1d0e60ece6b090ab5020c11"}
+  {17001, "2fe2962dfef23c74b5dfc4380f3d76a3fbe62030c1d0e60ece6b090ab5020c11"},
+  {30000, "e2ba73948df5aeb02e7978c0fde87b94c2da246e3e33326dda612d368863c0e5"},
+  {50509, "c5c5abd7545f589b1122c44a1d0c7b40418da6aff4137646dfcdd24e6452623e"}
 };
 } // CryptoNote
 
