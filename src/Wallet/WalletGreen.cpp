@@ -1798,7 +1798,7 @@ bool WalletGreen::updateWalletTransactionInfo(size_t transactionId, const Crypto
   auto it = std::next(txIdIndex.begin(), transactionId);
 
   bool updated = false;
-  bool r = txIdIndex.modify(it, [this, transactionId, &info, totalAmount, &updated](WalletTransaction& transaction) {
+  bool r = txIdIndex.modify(it, [&info, totalAmount, &updated](WalletTransaction& transaction) {
     if (transaction.blockHeight != info.blockHeight) {
       transaction.blockHeight = info.blockHeight;
       updated = true;
@@ -2029,7 +2029,7 @@ bool WalletGreen::adjustTransfer(size_t transactionId, size_t firstTransferIdx, 
           it->second.amount = amount;
           updated = true;
         }
-        
+
         firstAddressTransferFound = true;
         ++it;
       }
@@ -2072,7 +2072,7 @@ bool WalletGreen::eraseTransfersByAddress(size_t transactionId, size_t firstTran
 bool WalletGreen::eraseForeignTransfers(size_t transactionId, size_t firstTransferIdx, const std::unordered_set<std::string>& knownAddresses,
   bool eraseOutputTransfers) {
 
-  return eraseTransfers(transactionId, firstTransferIdx, [this, &knownAddresses, eraseOutputTransfers](bool isOutput, const std::string& transferAddress) {
+  return eraseTransfers(transactionId, firstTransferIdx, [&knownAddresses, eraseOutputTransfers](bool isOutput, const std::string& transferAddress) {
     return eraseOutputTransfers == isOutput && knownAddresses.count(transferAddress) == 0;
   });
 }
@@ -2794,7 +2794,7 @@ void WalletGreen::transactionDeleted(ITransfersSubscription* object, const Hash&
   deleteUnlockTransactionJob(transactionHash);
 
   bool updated = false;
-  m_transactions.get<TransactionIndex>().modify(it, [this, &transactionHash, &updated](CryptoNote::WalletTransaction& tx) {
+  m_transactions.get<TransactionIndex>().modify(it, [&updated](CryptoNote::WalletTransaction& tx) {
     if (tx.state == WalletTransactionState::CREATED || tx.state == WalletTransactionState::SUCCEEDED) {
       tx.state = WalletTransactionState::CANCELLED;
       updated = true;
@@ -2842,7 +2842,7 @@ void WalletGreen::startBlockchainSynchronizer() {
    stops. After some investigation, it appears that we need to run this
    archaic line of code to run other code on the dispatcher? */
 void WalletGreen::updateInternalCache() {
-    System::RemoteContext<void> updateInternalBC(m_dispatcher, [this] () {});
+    System::RemoteContext<void> updateInternalBC(m_dispatcher, [] () {});
     updateInternalBC.get();
 }
 
@@ -3224,7 +3224,7 @@ std::vector<WalletGreen::OutputToTransfer> WalletGreen::pickRandomFusionInputs(c
       break;
     }
   }
-  
+
   if (bucketNumberIndex == bucketNumbers.size()) {
     return {};
   }
@@ -3236,7 +3236,7 @@ std::vector<WalletGreen::OutputToTransfer> WalletGreen::pickRandomFusionInputs(c
   for (size_t i = 0; i < selectedBucket; ++i) {
     lowerBound *= 10;
   }
-   
+
   uint64_t upperBound = selectedBucket == std::numeric_limits<uint64_t>::digits10 ? UINT64_MAX : lowerBound * 10;
   std::vector<WalletGreen::OutputToTransfer> selectedOuts;
   selectedOuts.reserve(bucketSizes[selectedBucket]);
@@ -3262,7 +3262,7 @@ std::vector<WalletGreen::OutputToTransfer> WalletGreen::pickRandomFusionInputs(c
   }
 
   std::sort(trimmedSelectedOuts.begin(), trimmedSelectedOuts.end(), outputsSortingFunction);
-  return trimmedSelectedOuts;  
+  return trimmedSelectedOuts;
 }
 
 std::vector<TransactionsInBlockInfo> WalletGreen::getTransactionsInBlocks(uint32_t blockIndex, size_t count) const {
@@ -3270,7 +3270,7 @@ std::vector<TransactionsInBlockInfo> WalletGreen::getTransactionsInBlocks(uint32
     m_logger(ERROR, BRIGHT_RED) << "Bad argument: block count must be greater than zero";
     throw std::system_error(make_error_code(error::WRONG_PARAMETERS), "blocks count must be greater than zero");
   }
-  
+
   if (blockIndex == 0) {
     m_logger(ERROR, BRIGHT_RED) << "Bad argument: blockIndex must be greater than zero";
     throw std::system_error(make_error_code(error::WRONG_PARAMETERS), "blockIndex must be greater than zero");

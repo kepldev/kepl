@@ -124,7 +124,7 @@ const CryptoNote::Currency PaymentGateService::getCurrency() {
 }
 
 void PaymentGateService::run() {
-  
+
   System::Dispatcher localDispatcher;
   System::Event localStopEvent(localDispatcher);
 
@@ -216,7 +216,7 @@ void PaymentGateService::runInProcess(Logging::LoggerRef& log) {
   CryptoNote::NodeServer p2pNode(*dispatcher, protocol, logger);
   CryptoNote::RpcServerConfig rpcConfig;
   CryptoNote::RpcServer rpcServer(*dispatcher, logger, core, p2pNode, protocol);
-  
+
   protocol.set_p2p_endpoint(&p2pNode);
 
   log(Logging::INFO) << "initializing p2pNode";
@@ -226,11 +226,11 @@ void PaymentGateService::runInProcess(Logging::LoggerRef& log) {
 
   log(Logging::INFO) << "Starting node RPC Server address " << rpcConfig.getBindAddress() << " ...";
   rpcServer.start(rpcConfig.bindIp, rpcConfig.bindPort);
-  
+
   log(Logging::INFO) << "Starting local NodeRPCProxy...";
   std::unique_ptr<CryptoNote::INode> node(new CryptoNote::NodeRpcProxy(rpcConfig.bindIp, rpcConfig.bindPort, logger));
   std::error_code nodeInitStatus;
-  node->init([&log, &nodeInitStatus](std::error_code ec) {
+  node->init([&nodeInitStatus](std::error_code ec) {
     nodeInitStatus = ec;
   });
 
@@ -245,14 +245,14 @@ void PaymentGateService::runInProcess(Logging::LoggerRef& log) {
   log(Logging::INFO) << "Spawning p2p server";
 
   System::Event p2pStarted(*dispatcher);
-  
+
   System::Context<> context(*dispatcher, [&]() {
     p2pStarted.set();
     p2pNode.run();
   });
 
   p2pStarted.wait();
-  
+
   runWalletService(currency, *node);
 
   log(Logging::INFO) << "Stopping node RPC Server...";
@@ -260,17 +260,17 @@ void PaymentGateService::runInProcess(Logging::LoggerRef& log) {
   p2pNode.sendStopSignal();
   context.get();
   node->shutdown();
-  p2pNode.deinit(); 
+  p2pNode.deinit();
   core.save();
 }
 
 void PaymentGateService::runRpcProxy(Logging::LoggerRef& log) {
   log(Logging::INFO) << "Starting Payment Gate with remote node";
   CryptoNote::Currency currency = currencyBuilder.currency();
-  
+
   std::unique_ptr<CryptoNote::INode> node(
     PaymentService::NodeFactory::createNode(
-      config.remoteNodeConfig.daemonHost, 
+      config.remoteNodeConfig.daemonHost,
       config.remoteNodeConfig.daemonPort,
       log.getLogger()));
 
