@@ -1,6 +1,6 @@
 // Copyright (c) 2012-2017, The CryptoNote developers, The Bytecoin developers
 // Copyright (c) 2018, The TurtleCoin Developers
-// 
+//
 // Please see the included LICENSE file for more information.
 
 
@@ -98,8 +98,8 @@ void NodeRpcProxy::init(const INode::Callback& callback) {
 
   m_state = STATE_INITIALIZING;
   resetInternalState();
-  m_workerThread = std::thread([this, callback] { 
-    workerThread(callback); 
+  m_workerThread = std::thread([this, callback] {
+    workerThread(callback);
   });
 }
 
@@ -285,7 +285,7 @@ void NodeRpcProxy::updatePoolState(const std::vector<std::unique_ptr<ITransactio
     m_knownTxs.emplace(std::move(hash));
   }
 }
-
+/*
 std::string NodeRpcProxy::getInfo() {
   CryptoNote::COMMAND_RPC_GET_INFO::request ireq;
   CryptoNote::COMMAND_RPC_GET_INFO::response iresp;
@@ -294,11 +294,11 @@ std::string NodeRpcProxy::getInfo() {
 
   if (ec || iresp.status != CORE_RPC_STATUS_OK) {
     return std::string("Problem retrieving information from RPC server.");
-  } 
-    
+  }
+
   return Common::get_status_string(iresp);
 }
-
+*/
 std::vector<Crypto::Hash> NodeRpcProxy::getKnownTxsVector() const {
   return std::vector<Crypto::Hash>(m_knownTxs.begin(), m_knownTxs.end());
 }

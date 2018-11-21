@@ -1,6 +1,6 @@
 // Copyright (c) 2012-2017, The CryptoNote developers, The Bytecoin developers
 // Copyright (c) 2018, The TurtleCoin Developers
-// 
+//
 // Please see the included LICENSE file for more information.
 
 #pragma once
@@ -87,7 +87,7 @@ public:
   virtual uint32_t getLocalBlockCount() const = 0;
   virtual uint32_t getKnownBlockCount() const = 0;
   virtual uint64_t getLastLocalBlockTimestamp() const = 0;
-  virtual std::string getInfo() = 0;
+  // virtual std::string getInfo() = 0;
 
   virtual void getBlockHashesByTimestamps(uint64_t timestampBegin, size_t secondsCount, std::vector<Crypto::Hash>& blockHashes, const Callback& callback) = 0;
   virtual void getTransactionHashesByPaymentId(const Crypto::Hash& paymentId, std::vector<Crypto::Hash>& transactionHashes, const Callback& callback) = 0;
